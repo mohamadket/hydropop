@@ -1,4 +1,4 @@
-/* HydroPop Site Bundle — מנוע + loader. נבנה 2026-08-10 */
+/* HydroPop Site Bundle — מנוע + loader. נבנה 2026-08-10 22:49 */
 /* התקנה: <script src=".../hydropop.site.js" data-config="https://.../getConfig" defer></script> */
 /* =============================================================================
  * HydroPop Engine v1.0.0
@@ -955,36 +955,52 @@ input[aria-invalid="true"] ~ .err{display:block;}
   /* ==========================================================================
    * 10. כשירות — האם מותר להציג קמפיין
    * ======================================================================== */
-  function eligible(camp) {
-    if (!camp.enabled) return false;
-    if (CFG.debug) return true;
+  /**
+   * בדיקת כשירות עם סיבה מילולית.
+   * `soft: true` = הסיבה זמנית ועשויה להשתנות בהמשך העמוד (למשל "עוד לא עברו X שניות"),
+   * ואז הטריגר נשאר דרוך ומנסה שוב. `soft: false` = סופי לעמוד הזה.
+   */
+  function checkEligible(camp) {
+    if (!camp.enabled) return { ok: false, why: 'הקמפיין כבוי' };
+    if (CFG.debug) return { ok: true, why: 'מצב debug — כל המגבלות מבוטלות' };
 
-    if (U.matchPath(CFG.suppressOnPaths)) return false;
+    if (U.matchPath(CFG.suppressOnPaths)) return { ok: false, why: 'עמוד ברשימת suppressOnPaths' };
 
     var a = camp.audience || {};
-    if (a.device === 'mobile' && !U.isMobile()) return false;
-    if (a.device === 'desktop' && U.isMobile()) return false;
-    if (a.urlInclude && a.urlInclude.length && !U.matchPath(a.urlInclude)) return false;
-    if (a.urlExclude && U.matchPath(a.urlExclude)) return false;
-    if (a.newVisitorsOnly && Store.state().pageViews > 1) return false;
-    if (a.minTimeOnPageSec && (U.now() - PAGE_START) / 1000 < a.minTimeOnPageSec) return false;
+    if (a.device === 'mobile' && !U.isMobile()) return { ok: false, why: 'מיועד למובייל בלבד' };
+    if (a.device === 'desktop' && U.isMobile()) return { ok: false, why: 'מיועד לדסקטופ בלבד' };
+    if (a.urlInclude && a.urlInclude.length && !U.matchPath(a.urlInclude))
+      return { ok: false, why: 'העמוד לא ברשימת urlInclude (' + a.urlInclude.join(', ') + ')' };
+    if (a.urlExclude && U.matchPath(a.urlExclude)) return { ok: false, why: 'העמוד ברשימת urlExclude' };
+    if (a.newVisitorsOnly && Store.state().pageViews > 1) return { ok: false, why: 'מיועד למבקרים חדשים בלבד' };
+    if (a.minTimeOnPageSec && (U.now() - PAGE_START) / 1000 < a.minTimeOnPageSec)
+      return { ok: false, soft: true, why: 'עוד לא עברו ' + a.minTimeOnPageSec + ' שניות בעמוד' };
 
     var ses = Store.session();
-    if (ses.shown.length >= (CFG.maxPopupsPerSession || 99)) return false;
-    if (ses.shown.indexOf(camp.id) !== -1) return false;
-    if (ses.lastShownAt && (U.now() - ses.lastShownAt) / 60000 < (CFG.globalCooldownMinutes || 0)) return false;
+    if (ses.shown.indexOf(camp.id) !== -1) return { ok: false, why: 'כבר הוצג בסשן הזה' };
+    if (ses.shown.length >= (CFG.maxPopupsPerSession || 99))
+      return { ok: false, why: 'מיצוי מכסת הסשן (' + CFG.maxPopupsPerSession + ' פופאפים)' };
+    if (ses.lastShownAt && (U.now() - ses.lastShownAt) / 60000 < (CFG.globalCooldownMinutes || 0))
+      return { ok: false, soft: true, why: 'מרווח גלובלי — נותרו ' +
+        Math.ceil(CFG.globalCooldownMinutes - (U.now() - ses.lastShownAt) / 60000) + ' דק׳' };
 
     var c = Store.camp(camp.id), f = camp.frequency || {};
-    if (f.maxImpressions && c.imp >= f.maxImpressions) return false;
-    if (f.cooldownHours && c.lastAt && (U.now() - c.lastAt) / 3600000 < f.cooldownHours) return false;
-    if (f.hideAfterConvertDays && c.convertedAt && (U.now() - c.convertedAt) / 86400000 < f.hideAfterConvertDays) return false;
+    if (f.maxImpressions && c.imp >= f.maxImpressions)
+      return { ok: false, why: 'מיצוי תצוגות (' + c.imp + '/' + f.maxImpressions + ')' };
+    if (f.cooldownHours && c.lastAt && (U.now() - c.lastAt) / 3600000 < f.cooldownHours)
+      return { ok: false, why: 'cooldown — נותרו ' +
+        Math.ceil(f.cooldownHours - (U.now() - c.lastAt) / 3600000) + ' שעות' };
+    if (f.hideAfterConvertDays && c.convertedAt && (U.now() - c.convertedAt) / 86400000 < f.hideAfterConvertDays)
+      return { ok: false, why: 'המבקר כבר המיר בקמפיין הזה' };
 
-    return true;
+    return { ok: true, why: 'כשיר' };
   }
+  function eligible(camp) { return checkEligible(camp).ok; }
 
   function attempt(camp, reason) {
     if (Flow.camp) return false;               // כבר פתוח משהו
-    if (!eligible(camp)) return false;
+    var chk = checkEligible(camp);
+    if (!chk.ok) { U.log('דילוג על ' + camp.id + ': ' + chk.why); return false; }
     var v = AB.pick(camp);
     if (!v) return false;
     Flow.open(camp, v, reason);
@@ -1064,6 +1080,10 @@ input[aria-invalid="true"] ~ .err{display:block;}
       });
       this.resetIdle();
 
+      // בדיקה מחזורית לטריגרים שנחסמו זמנית (למשל "עוד לא עברו X שניות")
+      this.recheckTimer = setInterval(function () { self.recheck(); }, 2500);
+      setTimeout(function () { if (self.recheckTimer) clearInterval(self.recheckTimer); }, 300000);
+
       win.addEventListener('pagehide', function () { Analytics.flush(true); });
     },
 
@@ -1073,15 +1093,15 @@ input[aria-invalid="true"] ~ .err{display:block;}
 
       this.armed.forEach(function (a) {
         if (a.fired) return;
-        if (a.kind === 'scroll' && pct >= a.pct) {
-          a.fired = true;
-          setTimeout(function () { attempt(a.camp, 'scroll:' + a.pct); }, a.delay);
+        if (a.kind === 'scroll' && pct >= a.pct && !a.reached) {
+          a.reached = true; a.reason = 'scroll:' + a.pct;
+          setTimeout(function () { self.tryOne(a); }, a.delay);
         }
         // מובייל: גלילה מהירה כלפי מעלה ליד ראש העמוד = כוונת יציאה
         if (a.kind === 'exit' && a.mobileFallback === 'scrollUp' && U.isMobile()) {
           var dy = self.lastY - y;
           if (dy > 90 && y < 380 && (U.now() - PAGE_START) / 1000 > a.minTime && self.maxScroll > 25) {
-            a.fired = true; attempt(a.camp, 'exit:scrollUp');
+            a.reached = true; a.reason = 'exit:scrollUp'; self.tryOne(a);
           }
         }
       });
@@ -1094,9 +1114,28 @@ input[aria-invalid="true"] ~ .err{display:block;}
         if (a.fired || a.kind !== 'exit') return;
         if ((U.now() - PAGE_START) / 1000 < a.minTime) return;
         if (U.isMobile() && how === 'mouse') return;
-        a.fired = true;
-        attempt(a.camp, 'exit:' + how);
+        a.reached = true; a.reason = 'exit:' + how;
+        self.tryOne(a);
       });
+    },
+
+    /** ניסיון הצגה בודד. נכשל זמנית? הטריגר נשאר דרוך וה-recheck ינסה שוב. */
+    tryOne: function (a) {
+      if (a.fired) return true;
+      if (attempt(a.camp, a.reason || a.kind)) { a.fired = true; return true; }
+      var chk = checkEligible(a.camp);
+      if (!chk.soft && !Flow.camp) a.fired = true;   // סיבה סופית — אין טעם לנסות שוב
+      return false;
+    },
+
+    /** בדיקה מחזורית: טריגרים שהתנאי שלהם כבר התקיים אך נחסמו זמנית */
+    recheck: function () {
+      var self = this, pending = 0;
+      this.armed.forEach(function (a) {
+        if (a.fired || !a.reached) return;
+        if (!self.tryOne(a)) pending++;
+      });
+      if (!pending) { clearInterval(self.recheckTimer); self.recheckTimer = null; }
     },
 
     resetIdle: function () {
@@ -1146,6 +1185,36 @@ input[aria-invalid="true"] ~ .err{display:block;}
     identify: function (o) { var s = Store.state(); s.identity = U.merge(s.identity, o); Store.save(); },
     reset: function () { Store.reset(); console.log('[HydroPop] המצב אופס. רענן את העמוד.'); },
     stats: function () { return JSON.parse(JSON.stringify(Store.state().stats)); },
+
+    /** אבחון: למה כל קמפיין מוצג או לא מוצג ברגע זה */
+    why: function () {
+      var rows = (CFG.campaigns || []).map(function (c) {
+        var chk = checkEligible(c), t = c.trigger || {}, st = Store.camp(c.id);
+        var armed = null;
+        Triggers.armed.forEach(function (a) { if (a.camp.id === c.id) armed = a; });
+        return {
+          'קמפיין': c.id,
+          'כשיר עכשיו': chk.ok ? '✅ כן' : '❌ לא',
+          'סיבה': chk.why,
+          'טריגר': t.type + (t.percent ? ' ' + t.percent + '%' : '') + (t.seconds ? ' ' + t.seconds + 'ש' : ''),
+          'התנאי התקיים': armed ? (armed.reached ? 'כן' : 'עדיין לא') : '—',
+          'תצוגות': st.imp
+        };
+      });
+      console.table(rows);
+      console.log('גלילה נוכחית: ' + Math.round(U.scrollPct()) + '% · זמן בעמוד: ' +
+        Math.round((U.now() - PAGE_START) / 1000) + 'ש · הוצגו בסשן: ' + Store.session().shown.join(', ') || '(כלום)');
+      return rows;
+    },
+
+    /** בדיקה מהירה: מאפס הכל ומציג קמפיין מיד */
+    test: function (campId) {
+      Store.reset();
+      var c = null;
+      (CFG.campaigns || []).forEach(function (x) { if (x.id === campId) c = x; });
+      if (!c) { console.log('קמפיינים זמינים:', (CFG.campaigns || []).map(function (x) { return x.id; }).join(', ')); return; }
+      API.open(campId);
+    },
     significance: Stats.ztest,
     sampleSize: Stats.sampleSize,
 
@@ -1187,7 +1256,7 @@ input[aria-invalid="true"] ~ .err{display:block;}
       return n;
     },
 
-    _internals: { U: U, Store: Store, Stats: Stats, Analytics: Analytics, CRM: CRM, AB: AB, Flow: Flow, Triggers: Triggers, eligible: eligible, attempt: attempt }
+    _internals: { U: U, Store: Store, Stats: Stats, Analytics: Analytics, CRM: CRM, AB: AB, Flow: Flow, Triggers: Triggers, eligible: eligible, checkEligible: checkEligible, attempt: attempt }
   };
 
   /* ==========================================================================
@@ -1297,3 +1366,6 @@ input[aria-invalid="true"] ~ .err{display:block;}
     });
 
 })(window, document);
+
+/* חותמת בנייה — הרץ HydroPop.build בקונסול כדי לוודא איזו גרסה רצה באתר */
+try{window.HydroPop.build="2026-08-10 22:49";}catch(e){}
