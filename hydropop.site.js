@@ -1,4 +1,4 @@
-/* HydroPop Site Bundle — מנוע + loader. נבנה 2026-08-10 22:49 */
+/* HydroPop Site Bundle — מנוע + loader. נבנה 2026-08-10 23:17 */
 /* התקנה: <script src=".../hydropop.site.js" data-config="https://.../getConfig" defer></script> */
 /* =============================================================================
  * HydroPop Engine v1.0.0
@@ -54,10 +54,12 @@
     reducedMotion: function () { return win.matchMedia('(prefers-reduced-motion: reduce)').matches; },
     dnt: function () { return CFG.respectDoNotTrack && (navigator.doNotTrack === '1' || win.doNotTrack === '1'); },
     scrollPct: function () {
-      var h = doc.documentElement, b = doc.body;
-      var total = Math.max(h.scrollHeight, b ? b.scrollHeight : 0) - win.innerHeight;
-      if (total <= 0) return 100;
-      return Math.min(100, Math.max(0, (win.pageYOffset / total) * 100));
+      var h = doc.documentElement || {}, b = doc.body || {};
+      var docH = Math.max(h.scrollHeight || 0, b.scrollHeight || 0, h.clientHeight || 0);
+      var total = docH - (win.innerHeight || 0);
+      if (!(total > 0)) return 100;                       // גם מכסה NaN
+      var pct = ((win.pageYOffset || 0) / total) * 100;
+      return pct > 0 ? Math.min(100, pct) : 0;
     },
     matchPath: function (list) {
       if (!list || !list.length) return false;
@@ -1080,9 +1082,12 @@ input[aria-invalid="true"] ~ .err{display:block;}
       });
       this.resetIdle();
 
+      // הערכה מיידית של מצב הגלילה הנוכחי — הגולש עשוי כבר להיות באמצע העמוד
+      setTimeout(function () { self.onScroll(); }, 0);
+
       // בדיקה מחזורית לטריגרים שנחסמו זמנית (למשל "עוד לא עברו X שניות")
       this.recheckTimer = setInterval(function () { self.recheck(); }, 2500);
-      setTimeout(function () { if (self.recheckTimer) clearInterval(self.recheckTimer); }, 300000);
+      setTimeout(function () { if (self.recheckTimer) { clearInterval(self.recheckTimer); self.recheckTimer = null; } }, 300000);
 
       win.addEventListener('pagehide', function () { Analytics.flush(true); });
     },
@@ -1128,14 +1133,21 @@ input[aria-invalid="true"] ~ .err{display:block;}
       return false;
     },
 
-    /** בדיקה מחזורית: טריגרים שהתנאי שלהם כבר התקיים אך נחסמו זמנית */
+    /**
+     * בדיקה מחזורית. שני תפקידים:
+     * 1. הערכה מחדש של מיקום הגלילה — קריטי אם המנוע עלה *אחרי* שהגולש כבר גלל
+     *    (טעינת הגדרות איטית מהשרת), ואז אירוע הגלילה כבר לא יגיע שוב.
+     * 2. ניסיון חוזר לטריגרים שהתנאי שלהם התקיים אך נחסמו זמנית.
+     */
     recheck: function () {
       var self = this, pending = 0;
+      this.onScroll();
       this.armed.forEach(function (a) {
-        if (a.fired || !a.reached) return;
-        if (!self.tryOne(a)) pending++;
+        if (a.fired) return;
+        pending++;                       // כל טריגר שעדיין לא נורה = יש למה להמשיך
+        if (a.reached) self.tryOne(a);
       });
-      if (!pending) { clearInterval(self.recheckTimer); self.recheckTimer = null; }
+      if (!pending && self.recheckTimer) { clearInterval(self.recheckTimer); self.recheckTimer = null; }
     },
 
     resetIdle: function () {
@@ -1368,4 +1380,4 @@ input[aria-invalid="true"] ~ .err{display:block;}
 })(window, document);
 
 /* חותמת בנייה — הרץ HydroPop.build בקונסול כדי לוודא איזו גרסה רצה באתר */
-try{window.HydroPop.build="2026-08-10 22:49";}catch(e){}
+try{window.HydroPop.build="2026-08-10 23:17";}catch(e){}
