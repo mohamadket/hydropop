@@ -1,4 +1,4 @@
-/* HydroPop Site Bundle — מנוע + loader. נבנה 2026-08-10 23:17 */
+/* HydroPop Site Bundle — מנוע + loader. נבנה 2026-08-12 19:24 */
 /* התקנה: <script src=".../hydropop.site.js" data-config="https://.../getConfig" defer></script> */
 /* =============================================================================
  * HydroPop Engine v1.0.0
@@ -27,6 +27,7 @@
   var NS = 'hydropop_v1';
   var LS_KEY = NS + '_state';
   var SS_KEY = NS + '_session';
+  var OB_KEY = NS + '_outbox';                    // לידים שלא הצליחו להישלח
 
   /* ==========================================================================
    * 1. עזרים
@@ -156,8 +157,43 @@
       if (!s.stats[k]) s.stats[k] = { imp: 0, engaged: 0, leads: 0, dismissed: 0, steps: {} };
       return s.stats[k];
     },
+    /* התקדמות בשאלון. נשמרות אך ורק תשובות בחירה — לעולם לא פרטי קשר.
+       הכל בדפדפן של הגולש, נמחק בהמרה או אחרי מספר הימים שהוגדר. */
+    prog: function (campId) {
+      var s = this.state(); s.progress = s.progress || {};
+      return s.progress[campId] || null;
+    },
+    setProg: function (campId, data) {
+      var s = this.state(); s.progress = s.progress || {};
+      if (data) s.progress[campId] = data; else delete s.progress[campId];
+      this.save();
+    },
+    purgeProg: function (days) {
+      var s = this.state(); if (!s.progress) return;
+      var max = (days || 7) * 86400000, now = U.now(), changed = false;
+      Object.keys(s.progress).forEach(function (k) {
+        if (now - (s.progress[k].at || 0) > max) { delete s.progress[k]; changed = true; }
+      });
+      if (changed) this.save();
+    },
+
+    /* תור לידים שנכשלו בשליחה — ניסיון חוזר בטעינת העמוד הבאה.
+       בניגוד לשמירת ההתקדמות, כאן *כן* יש פרטי קשר — כי בלעדיהם אין ליד.
+       לכן: מקסימום 5 רשומות, נמחק מיד עם שליחה מוצלחת, ופג אוטומטית אחרי 3 ימים. */
+    outbox: function () { var q = this._read(this.ls(), OB_KEY, []); return q && q.length ? q : []; },
+    pushOutbox: function (lead) {
+      var q = this.outbox();
+      q.push({ at: U.now(), tries: 0, lead: lead });
+      while (q.length > 5) q.shift();
+      this._write(this.ls(), OB_KEY, q);
+    },
+    setOutbox: function (q) {
+      if (q && q.length) this._write(this.ls(), OB_KEY, q);
+      else { try { this.ls().removeItem(OB_KEY); } catch (e) { } }
+    },
+
     reset: function () {
-      try { this.ls().removeItem(LS_KEY); this.ss().removeItem(SS_KEY); } catch (e) { }
+      try { this.ls().removeItem(LS_KEY); this.ls().removeItem(OB_KEY); this.ss().removeItem(SS_KEY); } catch (e) { }
       this._s = null; this._sess = null;
     }
   };
@@ -239,7 +275,8 @@
       this.emit(name, ev);
       this.emit('*', ev);
 
-      if (U.dnt()) return;
+      // תצוגה מקדימה בפאנל — שום דבר לא יוצא החוצה, אחרת הדוחות מזדהמים
+      if (CFG.previewMode || U.dnt()) return;
 
       // GA4 / GTM
       if (CFG.analytics.ga4) {
@@ -294,7 +331,10 @@
    * 5. חיבור CRM
    * ======================================================================== */
   var CRM = {
-    send: function (lead) {
+    /** @param {boolean} isRetry ניסיון מהתור — לא נכנס לתור שוב בכישלון */
+    send: function (lead, isRetry) {
+      // תצוגה מקדימה — לא שולחים ולא מתורים. ליד מזויף ב-CRM גרוע מליד חסר.
+      if (CFG.previewMode) { U.log('תצוגה מקדימה — הליד לא נשלח ולא נשמר:', lead); return Promise.resolve({ ok: false, preview: true }); }
       var c = CFG.crm, payload, url, headers = { 'Content-Type': 'application/json' };
       var fm = c.fieldMap || {};
 
@@ -367,9 +407,54 @@
 
       if (!url || url.indexOf('REPLACE-ME') !== -1) {
         U.log('CRM לא מוגדר — הליד לא נשלח:', lead);
-        return Promise.resolve({ ok: false, skipped: true });
+        if (!isRetry) Store.pushOutbox(lead);
+        return Promise.resolve({ ok: false, skipped: true, queued: !isRetry });
       }
-      return this._post(url, headers, payload, c.retries || 0);
+      return this._post(url, headers, payload, c.retries || 0).then(function (r) {
+        if (!r.ok && !isRetry) {
+          Store.pushOutbox(lead);
+          U.log('שליחת הליד נכשלה — נשמר לניסיון חוזר בטעינה הבאה');
+          r.queued = true;
+        }
+        return r;
+      });
+    },
+
+    /**
+     * ניקוז התור. רץ פעם אחת בטעינת עמוד, אחרי שההגדרות הגיעו.
+     * זה מה שמונע אובדן ליד כשה-CRM היה למטה בזמן השליחה.
+     */
+    drain: function () {
+      var q = Store.outbox();
+      if (!q.length) return;
+      var c = CFG.crm || {};
+      if (!c.endpoint || c.endpoint.indexOf('REPLACE-ME') !== -1) return;   // עדיין אין לאן לשלוח
+
+      var now = U.now(), maxAge = (c.outboxDays || 3) * 86400000;
+      var live = q.filter(function (it) { return now - (it.at || 0) < maxAge && (it.tries || 0) < 5; });
+      if (live.length !== q.length) Store.setOutbox(live);
+      if (!live.length) return;
+
+      var left = live.slice(), done = 0;
+      U.log('מנקז ' + live.length + ' לידים שממתינים מהפעם הקודמת');
+      live.forEach(function (it) {
+        it.tries = (it.tries || 0) + 1;
+        CRM.send(it.lead, true).then(function (r) {
+          done++;
+          if (r && r.ok) {
+            var i = left.indexOf(it); if (i > -1) left.splice(i, 1);
+            var src = String((it.lead && it.lead.source) || '').split('/');
+            Analytics.track('lead_recovered', {
+              campaign: src[1] || '', variant: src[2] || '',
+              tries: it.tries, ageMs: now - (it.at || 0)
+            });
+          }
+          if (done === live.length) Store.setOutbox(left);
+        })['catch'](function () {
+          done++;
+          if (done === live.length) Store.setOutbox(left);
+        });
+      });
     },
 
     _post: function (url, headers, payload, retries) {
@@ -524,6 +609,51 @@ input[aria-invalid="true"] ~ .err{display:block;}
 .copy:hover{background:${t.primaryDark};}
 .copy.done{background:${t.accent};color:${t.ink};}
 
+/* ===== סגנון "שאלון ממותג" (camp.ui) ===== */
+.card.quiz{background:linear-gradient(168deg,#F3FBF2,#E2F3E4 55%,#D5EDDA);}
+.card.quiz::before{display:none;}
+.card.quiz .body{padding:26px 22px 20px;}
+.brand{display:flex;flex-direction:column;align-items:center;margin-bottom:6px;}
+.brand img{max-height:46px;margin-bottom:4px;}
+.brand .bt{font-size:19px;font-weight:800;color:${t.primary};letter-spacing:1.5px;}
+.brand .bs{font-size:10.5px;color:${t.inkSoft};letter-spacing:.4px;}
+.headline{font-size:19px;font-weight:800;text-align:center;line-height:1.4;margin:6px 0 16px;color:${t.ink};}
+.qpanel{background:${t.surface};border-radius:18px;padding:20px 18px 14px;box-shadow:0 10px 28px -18px rgba(6,48,34,.35);}
+.qpanel h2{font-size:17.5px;margin-bottom:12px;}
+.qpanel .sub{font-size:13.5px;margin-bottom:14px;}
+.card.quiz .opt{border:0;background:transparent;border-radius:10px;padding:12px 6px;border-bottom:1px solid ${t.border};}
+.card.quiz .opts{gap:0;}
+.card.quiz .opt:last-child{border-bottom:0;}
+.card.quiz .opt:hover{background:${t.surfaceAlt};transform:none;border-color:${t.border};}
+.card.quiz .opt[aria-pressed="true"]{box-shadow:none;background:${t.surfaceAlt};}
+.rad{width:21px;height:21px;border-radius:50%;background:#F1C40F;opacity:.85;flex:none;transition:.18s;}
+.opt[aria-pressed="true"] .rad{background:#27AE60;opacity:1;box-shadow:0 0 0 4px rgba(39,174,96,.22);}
+.qfoot{display:flex;align-items:center;gap:12px;margin-top:16px;}
+.qprev{border:0;background:${t.surface};color:${t.primary};font:inherit;font-weight:700;font-size:14px;padding:10px 18px;border-radius:12px;cursor:pointer;box-shadow:0 4px 12px -8px rgba(6,48,34,.35);transition:.18s;}
+.qprev:hover{transform:translateY(-1px);}
+.qbar{flex:1;height:10px;border-radius:99px;background:${t.ink};overflow:hidden;}
+.qbar i{display:block;height:100%;background:linear-gradient(90deg,${t.primary},${t.accent});border-radius:99px;transition:width .45s cubic-bezier(.2,.8,.25,1);}
+.resume{display:flex;align-items:center;gap:8px;justify-content:center;font-size:12px;font-weight:700;
+ color:${t.primary};background:${t.surfaceAlt};border:1px solid ${t.border};border-radius:99px;
+ padding:6px 12px;margin-bottom:12px;}
+.resume button{border:0;background:transparent;color:${t.inkSoft};font:inherit;font-size:11.5px;
+ font-weight:600;cursor:pointer;text-decoration:underline;padding:0;}
+.resume button:hover{color:${t.ink};}
+.proof{display:flex;flex-direction:column;gap:3px;margin-top:14px;padding:11px 14px;border-radius:13px;
+ background:${t.surface};border:1px solid ${t.border};box-shadow:0 6px 18px -14px rgba(6,48,34,.4);
+ animation:hp-fade .5s ease both;}
+.proof .pst{color:#F5B301;font-size:12.5px;letter-spacing:1.5px;line-height:1;}
+.proof .ptx{font-size:12.8px;line-height:1.55;color:${t.ink};}
+.proof .pnm{font-size:11.5px;font-weight:700;color:${t.inkSoft};}
+@keyframes hp-fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.vid{position:relative;padding-top:56.25%;border-radius:14px;overflow:hidden;background:#000;}
+.vid iframe,.vid video{position:absolute;inset:0;width:100%;height:100%;border:0;}
+.vid-empty{position:absolute;inset:0;display:grid;place-items:center;color:#9CB5AB;font-size:14px;}
+.qconsent{justify-content:center;margin-top:12px;font-size:12px;}
+.qconsent.req{color:${t.danger};font-weight:700;animation:hp-shake .3s;}
+@keyframes hp-shake{25%{transform:translateX(4px)}75%{transform:translateX(-4px)}}
+.card.quiz .btn{margin-top:6px;}
+
 @media (max-width:520px){
  .wrap[data-layout="modal"]{align-items:flex-end;padding:0;}
  .card{max-width:none;border-radius:${t.radius} ${t.radius} 0 0;max-height:88vh;}
@@ -547,7 +677,7 @@ input[aria-invalid="true"] ~ .err{display:block;}
       return U.merge(CFG.theme, variant.themeOverride || camp.themeOverride || {});
     },
 
-    mount: function (camp, variant) {
+    mount: function (camp, variant, ui) {
       this.destroy(true);
       var t = this.theme(camp, variant);
 
@@ -575,7 +705,7 @@ input[aria-invalid="true"] ~ .err{display:block;}
       this.wrap.setAttribute('aria-label', camp.name || 'הודעה');
       this.wrap.innerHTML =
         '<div class="ovl" data-act="overlay"></div>' +
-        '<div class="card"><button class="x" data-act="close" aria-label="סגירה">✕</button>' +
+        '<div class="card' + (ui ? ' quiz' : '') + '"><button class="x" data-act="close" aria-label="סגירה">✕</button>' +
         '<div class="prog" hidden><i style="width:0"></i></div>' +
         '<div class="body"></div></div>';
 
@@ -653,11 +783,36 @@ input[aria-invalid="true"] ~ .err{display:block;}
 
     open: function (camp, variant, reason) {
       this.camp = camp; this.variant = variant;
-      this.steps = variant.steps || [];
-      this.idx = 0; this.history = []; this.answers = {};
+      // שלבים: מהספרייה (quizRef) או מוטמעים בווריאנט
+      var quiz = null;
+      if (variant.quizRef && CFG.quizzes) {
+        for (var qi = 0; qi < CFG.quizzes.length; qi++)
+          if (CFG.quizzes[qi].id === variant.quizRef) quiz = CFG.quizzes[qi];
+        if (!quiz) U.log('שאלון לא נמצא בספרייה:', variant.quizRef);
+      }
+      this.quiz = quiz;
+      this.ui = camp.ui || (quiz && quiz.ui) || null;
+      this.steps = (quiz ? quiz.steps : variant.steps) || [];
+      this.idx = 0; this.history = []; this.answers = {}; this.resumed = false;
       this.openedAt = U.now(); this.engaged = false; this.converted = false;
 
-      UI.mount(camp, variant);
+      // המשך מהמקום שנעצר (אם מופעל ורלוונטי)
+      var rc = CFG.resume || {};
+      if (rc.enabled !== false && camp.resume !== false) {
+        var pr = Store.prog(camp.id);
+        if (pr && pr.variant === variant.id && pr.quiz === (quiz ? quiz.id : '') &&
+            (U.now() - (pr.at || 0)) / 86400000 < (rc.days || 7)) {
+          var ri = this.stepIndex(pr.step);
+          if (ri > 0) {
+            this.idx = ri;
+            this.answers = pr.answers || {};
+            this.resumed = true;
+            Analytics.track('quiz_resume', { campaign: camp.id, variant: variant.id, step: pr.step, stepIndex: ri });
+          }
+        }
+      }
+
+      UI.mount(camp, variant, this.ui);
 
       var c = Store.camp(camp.id);
       c.imp++; c.lastAt = U.now(); Store.save();
@@ -666,7 +821,10 @@ input[aria-invalid="true"] ~ .err{display:block;}
       var ses = Store.session();
       ses.shown.push(camp.id); ses.lastShownAt = U.now(); Store.saveSession();
 
-      Analytics.track('popup_view', { campaign: camp.id, variant: variant.id, trigger: reason, layout: camp.layout });
+      Analytics.track('popup_view', {
+        campaign: camp.id, variant: variant.id, trigger: reason, layout: camp.layout,
+        quiz: quiz ? quiz.id : '', socialProof: this.proofLevel()
+      });
       this.render();
     },
 
@@ -718,23 +876,67 @@ input[aria-invalid="true"] ~ .err{display:block;}
 
     render: function () {
       var s = this.steps[this.idx];
-      UI.setProgress(s.progress ? this.progressPct() : null);
+      var ui = this.ui || null;
+      UI.setProgress(!ui && s.progress ? this.progressPct() : null);
 
       var st = Store.stat(this.camp.id, this.variant.id);
       st.steps[s.id] = (st.steps[s.id] || 0) + 1; Store.save();
+
+      // שמירת מיקום — תשובות בחירה בלבד, בלי שדות טופס
+      if ((CFG.resume || {}).enabled !== false && this.camp.resume !== false &&
+          this.idx > 0 && s.type !== 'success' && !this.converted) {
+        Store.setProg(this.camp.id, {
+          variant: this.variant.id, quiz: this.quiz ? this.quiz.id : '',
+          step: s.id, answers: this.answers, at: U.now()
+        });
+      }
+
       Analytics.track('step_view', { campaign: this.camp.id, variant: this.variant.id, step: s.id, stepIndex: this.idx, type: s.type });
 
-      var html = '';
-      if (s.eyebrow) html += '<span class="eyebrow">' + U.esc(s.eyebrow) + '</span>';
-      if (s.title) html += '<h2>' + U.esc(s.title) + '</h2>';
-      if (s.subtitle) html += '<p class="sub">' + U.esc(s.subtitle) + '</p>';
+      var inner = '';
+      if (s.type === 'success') {
+        inner = this.renderSuccess(s);
+      } else {
+        if (s.eyebrow) inner += '<span class="eyebrow">' + U.esc(s.eyebrow) + '</span>';
+        if (s.title) inner += '<h2>' + U.esc(s.title) + '</h2>';
+        if (s.subtitle) inner += '<p class="sub">' + U.esc(s.subtitle) + '</p>';
+        if (s.type === 'choice') inner += this.renderChoice(s);
+        else if (s.type === 'form') inner += this.renderForm(s);
+        else if (s.type === 'video') inner += this.renderVideo(s);
+        else if (s.type === 'content') inner += this.renderContent(s);
+      }
 
-      if (s.type === 'choice') html += this.renderChoice(s);
-      else if (s.type === 'form') html += this.renderForm(s);
-      else if (s.type === 'success') html = this.renderSuccess(s);
-      else if (s.type === 'content') html += this.renderContent(s);
+      var resumeBar = (this.resumed && this.idx > 0 && s.type !== 'success')
+        ? '<div class="resume">המשכנו מהמקום שעצרת ✓<button data-restart type="button">התחל מחדש</button></div>' : '';
 
-      if (this.history.length && s.type !== 'success') html += '<button class="back" data-back>← חזרה</button>';
+      var html;
+      if (ui) {
+        // סגנון שאלון ממותג: לוגו + כותרת קבועה + פאנל לבן + פס התקדמות תחתון + הסכמה
+        var brand = '<div class="brand">' +
+          (ui.logoImg ? '<img src="' + U.esc(ui.logoImg) + '" alt="">' : '') +
+          (ui.logoText ? '<span class="bt">' + U.esc(ui.logoText) + '</span>' : '') +
+          (ui.logoSub ? '<span class="bs">' + U.esc(ui.logoSub) + '</span>' : '') +
+          '</div>';
+        if (s.type === 'success') {
+          html = brand + inner;
+        } else {
+          html = brand + resumeBar +
+            (ui.headline ? '<div class="headline">' + U.esc(ui.headline) + '</div>' : '') +
+            '<div class="qpanel">' + inner + '</div>' +
+            this.renderProof(s) +
+            '<div class="qfoot">' +
+            (this.history.length ? '<button class="qprev" data-back type="button">‹ קודם</button>' : '') +
+            (s.progress ? '<div class="qbar"><i style="width:' + Math.max(6, this.progressPct() || 6) + '%"></i></div>' : '') +
+            '</div>' +
+            (ui.consentText
+              ? '<label class="consent qconsent"><input type="checkbox" data-consent' + (this.answers._consent ? ' checked' : '') + '>' +
+                '<span>' + U.esc(ui.consentText) + '</span></label>'
+              : '');
+        }
+      } else {
+        html = resumeBar + inner + this.renderProof(s);
+        if (this.history.length && s.type !== 'success') html += '<button class="back" data-back>← חזרה</button>';
+      }
 
       UI.body().innerHTML = html;
       this.bind(s);
@@ -744,14 +946,22 @@ input[aria-invalid="true"] ~ .err{display:block;}
     },
 
     renderChoice: function (s) {
+      var quiz = !!this.ui;
       var cls = 'opts' + (s.columns === 2 ? ' grid2' : '');
+      // תשובה קודמת (חזרה אחורה או שחזור התקדמות) — האפשרות חוזרת מסומנת
+      var prev = s.key ? this.answers[s.key] : undefined;
+      var chosen = function (v) {
+        if (prev === undefined || prev === null) return false;
+        return Object.prototype.toString.call(prev) === '[object Array]' ? prev.indexOf(v) !== -1 : prev === v;
+      };
       var h = '<div class="' + cls + '" role="group">';
       (s.options || []).forEach(function (o, i) {
         var c = 'opt' + (o.primary ? ' primary' : '') + (o.ghost ? ' ghost' : '');
-        h += '<button class="' + c + '" data-opt="' + i + '" aria-pressed="false" type="button">';
+        h += '<button class="' + c + '" data-opt="' + i + '" aria-pressed="' + (chosen(o.value) ? 'true' : 'false') + '" type="button">';
         if (o.icon) h += '<span class="ic" aria-hidden="true">' + U.esc(o.icon) + '</span>';
         h += '<span class="tx">' + U.esc(o.label) + (o.desc ? '<span class="dsc">' + U.esc(o.desc) + '</span>' : '') + '</span>';
         if (s.multi) h += '<span class="chk" aria-hidden="true">✓</span>';
+        else if (quiz && !o.primary && !o.ghost) h += '<span class="rad" aria-hidden="true"></span>';
         h += '</button>';
       });
       h += '</div>';
@@ -795,6 +1005,44 @@ input[aria-invalid="true"] ~ .err{display:block;}
       return h;
     },
 
+    /* הוכחה חברתית — עוצמה נשלטת: off / low / medium / high */
+    proofLevel: function () {
+      var sp = (this.quiz && this.quiz.socialProof) || null;
+      if (!sp || sp.enabled === false || !(sp.items || []).length) return 'off';
+      return sp.intensity || 'medium';
+    },
+    renderProof: function (s) {
+      var sp = (this.quiz && this.quiz.socialProof) || null;
+      var lvl = this.proofLevel();
+      if (lvl === 'off' || s.type === 'success') return '';
+      // low = רק בשלב הראשון · medium = כל שלב שני · high = כל שלב
+      if (lvl === 'low' && this.idx !== 0) return '';
+      if (lvl === 'medium' && this.idx % 2 !== 0) return '';
+      var items = sp.items, it = items[this.idx % items.length];
+      if (!it || !it.text) return '';
+      var stars = Math.max(0, Math.min(5, it.rating == null ? 5 : it.rating));
+      return '<div class="proof">' +
+        (stars ? '<span class="pst" aria-label="' + stars + ' כוכבים">' + new Array(stars + 1).join('★') + '</span>' : '') +
+        '<span class="ptx">' + U.esc(it.text) + '</span>' +
+        (it.name ? '<span class="pnm">— ' + U.esc(it.name) + '</span>' : '') +
+        '</div>';
+    },
+
+    renderVideo: function (s) {
+      var u = String(s.videoUrl || '');
+      var yt = u.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([\w-]{6,})/);
+      var vmo = u.match(/vimeo\.com\/(\d+)/);
+      var h = '<div class="vid">';
+      if (yt) h += '<iframe src="https://www.youtube.com/embed/' + yt[1] + '?rel=0" allow="autoplay; fullscreen" allowfullscreen loading="lazy" title="video"></iframe>';
+      else if (vmo) h += '<iframe src="https://player.vimeo.com/video/' + vmo[1] + '" allow="autoplay; fullscreen" allowfullscreen loading="lazy" title="video"></iframe>';
+      else if (u) h += '<video src="' + U.esc(u) + '" controls playsinline></video>';
+      else h += '<div class="vid-empty">🎬 הדבק כתובת וידאו בהגדרות השלב</div>';
+      h += '</div>';
+      if (s.body) h += '<p class="sub" style="margin-top:12px">' + U.esc(s.body) + '</p>';
+      h += '<button class="btn" data-vnext type="button">' + U.esc(s.ctaLabel || 'המשך') + '</button>';
+      return h;
+    },
+
     renderContent: function (s) {
       var h = '';
       if (s.ctaLabel) h += '<button class="btn" data-cta type="button">' + U.esc(s.ctaLabel) + '</button>';
@@ -813,8 +1061,18 @@ input[aria-invalid="true"] ~ .err{display:block;}
       var backBtn = root.querySelector('[data-back]');
       if (backBtn) backBtn.onclick = function () { self.back(); };
 
-      // בחירות
+      var rst = root.querySelector('[data-restart]');
+      if (rst) rst.onclick = function () {
+        Store.setProg(self.camp.id, null);
+        Analytics.track('quiz_restart', { campaign: self.camp.id, variant: self.variant.id });
+        self.idx = 0; self.history = []; self.answers = {}; self.resumed = false;
+        self.render();
+      };
+
+      // בחירות — בשלב רב-בחירה מתחילים מהתשובות ששמורות, לא מרשימה ריקה
       var multiSel = [];
+      if (s.multi && s.key && Object.prototype.toString.call(self.answers[s.key]) === '[object Array]')
+        multiSel = self.answers[s.key].slice();
       root.querySelectorAll('[data-opt]').forEach(function (btn) {
         btn.onclick = function () {
           var o = s.options[+btn.getAttribute('data-opt')];
@@ -840,7 +1098,8 @@ input[aria-invalid="true"] ~ .err{display:block;}
             campaign: self.camp.id, variant: self.variant.id, step: s.id,
             key: s.key, value: o.value, stepIndex: self.idx
           });
-          setTimeout(function () { self.next(o.next); }, 180);
+          // בסגנון שאלון משהים מעט יותר, כדי שהעיגול הירוק ייראה
+          setTimeout(function () { self.next(o.next); }, self.ui ? 320 : 180);
         };
       });
 
@@ -848,6 +1107,13 @@ input[aria-invalid="true"] ~ .err{display:block;}
       if (mn) mn.onclick = function () {
         Analytics.track('step_answer', { campaign: self.camp.id, variant: self.variant.id, step: s.id, key: s.key, value: multiSel });
         self.next();
+      };
+
+      // הסכמה קבועה (סגנון שאלון) — נשמרת בין שלבים
+      var cbx = root.querySelector('[data-consent]');
+      if (cbx) cbx.onchange = function () {
+        self.answers._consent = cbx.checked;
+        var l = root.querySelector('.qconsent'); if (l) l.classList.remove('req');
       };
 
       // טופס
@@ -869,6 +1135,14 @@ input[aria-invalid="true"] ~ .err{display:block;}
         };
         if (navigator.clipboard) navigator.clipboard.writeText(code).then(done)['catch'](done);
         else done();
+      };
+
+      // וידאו — כפתור המשך
+      var vn = root.querySelector('[data-vnext]');
+      if (vn) vn.onclick = function () {
+        self.markEngaged();
+        Analytics.track('video_continue', { campaign: self.camp.id, variant: self.variant.id, step: s.id });
+        self.next(s.next);
       };
 
       // CTA
@@ -905,6 +1179,14 @@ input[aria-invalid="true"] ~ .err{display:block;}
         Analytics.track('submit_error', { campaign: this.camp.id, variant: this.variant.id, step: s.id, reason: 'consent' });
       }
 
+      // הסכמה קבועה של סגנון השאלון (camp.ui)
+      var uiC = this.ui && this.ui.consentText ? this.ui : null;
+      if (uiC && uiC.consentRequired && !this.answers._consent) {
+        valid = false;
+        var ql = UI.root.querySelector('.qconsent'); if (ql) { ql.classList.remove('req'); void ql.offsetWidth; ql.classList.add('req'); }
+        Analytics.track('submit_error', { campaign: this.camp.id, variant: this.variant.id, step: s.id, reason: 'consent' });
+      }
+
       if (!valid) {
         Analytics.track('submit_error', { campaign: this.camp.id, variant: this.variant.id, step: s.id });
         var bad = form.querySelector('[aria-invalid="true"]'); if (bad) bad.focus();
@@ -919,7 +1201,7 @@ input[aria-invalid="true"] ~ .err{display:block;}
       var lead = U.merge(data, {
         answers: U.merge(this.answers, { _page: location.pathname, _title: doc.title }),
         tags: (s.tags || []).concat(['campaign:' + this.camp.id, 'variant:' + this.variant.id]),
-        consent: consent ? !!consent.checked : null,
+        consent: consent ? !!consent.checked : (uiC ? !!this.answers._consent : null),
         source: 'hydropop/' + this.camp.id + '/' + this.variant.id,
         visitorId: Store.state().visitorId,
         utm: U.utm()
@@ -931,6 +1213,7 @@ input[aria-invalid="true"] ~ .err{display:block;}
       Store.save();
 
       this.converted = true;
+      Store.setProg(this.camp.id, null);   // הומר — אין מה לשחזר
       var stat = Store.stat(this.camp.id, this.variant.id);
       stat.leads++;
       Store.camp(this.camp.id).convertedAt = U.now();
@@ -942,8 +1225,13 @@ input[aria-invalid="true"] ~ .err{display:block;}
         timeToLeadMs: U.now() - this.openedAt
       });
 
+      // נשמר מראש — הגולש עשוי לסגור את הפופאפ לפני שה-CRM עונה
+      var campId = this.camp.id, varId = this.variant.id;
       CRM.send(lead).then(function (r) {
-        Analytics.track(r && r.ok ? 'crm_ok' : 'crm_fail', { campaign: self.camp.id, status: r && r.status, skipped: r && r.skipped });
+        Analytics.track(r && r.ok ? 'crm_ok' : 'crm_fail', {
+          campaign: campId, variant: varId, status: r && r.status,
+          skipped: r && r.skipped, queued: !!(r && r.queued)
+        });
       })['catch'](function () { });
 
       // תמיד ממשיכים למסך ההצלחה — לא חוסמים את המשתמש בגלל CRM
@@ -1022,6 +1310,12 @@ input[aria-invalid="true"] ~ .err{display:block;}
 
       camps.forEach(function (c) {
         var t = c.trigger || {};
+        // וריאנט יכול לשאת טריגר משלו (ניסויי שילובים).
+        // ההקצאה דטרמיניסטית — אותו מבקר יקבל תמיד את אותו שילוב.
+        if (c.variants && c.variants.length) {
+          var av = AB.pick(c);
+          if (av && av.trigger) t = av.trigger;
+        }
         switch (t.type) {
           case 'entry':
             setTimeout(function () { attempt(c, 'entry'); }, t.delayMs || 0);
@@ -1276,8 +1570,25 @@ input[aria-invalid="true"] ~ .err{display:block;}
    * ======================================================================== */
   function boot() {
     var s = Store.state(); s.pageViews++; Store.save();
+    Store.purgeProg((CFG.resume || {}).days || 7);   // מחיקת התקדמות שפג תוקפה
+    CRM.drain();                                     // לידים שלא נשלחו בפעם הקודמת
     var ses = Store.session(); ses.pageViews++; Store.saveSession();
 
+    // דופק חיבור — מאפשר ל-Base44 לדעת איזו גרסת מנוע והגדרות רצות באתר בפועל
+    Analytics.track('heartbeat', {
+      engineBuild: API.build || 'unknown',
+      configVersion: CFG.version || '',
+      // מונה הפרסומים של Base44 — נחתם בהגדרות ע"י saveConfig. זה מה שמשווים מולו.
+      publishedVersion: CFG.publishedVersion != null ? String(CFG.publishedVersion) : '',
+      // גרסת המנוע שההגדרות מצפות לה (נחתמה בפאנל בעת הפרסום)
+      requiredEngineBuild: CFG.requiredEngineBuild || '',
+      engineOutdated: !!(CFG.requiredEngineBuild && API.build && API.build < CFG.requiredEngineBuild),
+      configSource: API.configSource || 'inline',
+      campaigns: (CFG.campaigns || []).length,
+      enabledCampaigns: (CFG.campaigns || []).filter(function (c) { return c.enabled; })
+        .map(function (c) { return c.id; }).join(','),
+      host: location.hostname
+    });
     Analytics.track('page_view', { pageViews: s.pageViews, sessionPageViews: ses.pageViews });
     Triggers.init();
     U.log('מוכן. v' + CFG.version + ' · מבקר:', s.visitorId, '· קמפיינים:', (CFG.campaigns || []).length);
@@ -1304,6 +1615,8 @@ input[aria-invalid="true"] ~ .err{display:block;}
     if (cfg.analytics.flushIntervalMs == null) cfg.analytics.flushIntervalMs = 8000;
     cfg.crm = cfg.crm || { provider: 'webhook', endpoint: '' };
     cfg.suppressOnPaths = cfg.suppressOnPaths || [];
+    cfg.quizzes = cfg.quizzes || [];
+    cfg.resume = cfg.resume || { enabled: true, days: 7 };
     CFG = cfg;
     API.config = cfg;
     API.version = cfg.version || '';
@@ -1351,9 +1664,10 @@ input[aria-invalid="true"] ~ .err{display:block;}
     return d;
   }
 
-  function start(cfg) {
+  function start(cfg, source) {
     if (booted || !cfg || !cfg.campaigns) return;
     booted = true;
+    if (win.HydroPop) win.HydroPop.configSource = source || 'unknown';
     if (win.HydroPop && win.HydroPop.init) win.HydroPop.init(cfg);
     else win.HYDROPOP_CONFIG = cfg;   // המנוע עוד לא נטען — יאתחל את עצמו כשיגיע
   }
@@ -1362,7 +1676,7 @@ input[aria-invalid="true"] ~ .err{display:block;}
   try { cached = JSON.parse(win.localStorage.getItem(KEY)); } catch (e) { }
 
   // רשת איטית + יש עותק שמור → לא מחכים
-  if (cached) setTimeout(function () { start(cached); }, 2000);
+  if (cached) setTimeout(function () { start(cached, 'cache-timeout'); }, 2000);
 
   fetch(url, { cache: 'no-store' })
     .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
@@ -1370,14 +1684,14 @@ input[aria-invalid="true"] ~ .err{display:block;}
       var cfg = normalize(data);
       if (!cfg || !cfg.campaigns) throw new Error('תשובה ללא campaigns');
       try { win.localStorage.setItem(KEY, JSON.stringify(cfg)); } catch (e) { }
-      start(cfg);
+      start(cfg, 'server');
     })
     ['catch'](function (e) {
       console.warn('[HydroPop] משיכת ההגדרות נכשלה (' + e.message + ') — משתמש בעותק השמור אם קיים');
-      start(cached);
+      start(cached, 'cache-fallback');
     });
 
 })(window, document);
 
 /* חותמת בנייה — הרץ HydroPop.build בקונסול כדי לוודא איזו גרסה רצה באתר */
-try{window.HydroPop.build="2026-08-10 23:17";}catch(e){}
+try{window.HydroPop.build="2026-08-12 19:24";}catch(e){}
