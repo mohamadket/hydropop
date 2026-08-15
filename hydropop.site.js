@@ -1,5 +1,106 @@
-/* HydroPop Site Bundle — מנוע + loader. נבנה 2026-08-12 19:24 */
+/* HydroPop Site Bundle — מנוע + loader. נבנה 2026-08-15 20:13 */
 /* התקנה: <script src=".../hydropop.site.js" data-config="https://.../getConfig" defer></script> */
+/* HydroPop — ספריית העיצובים.
+   קובץ נפרד בכוונה: המנוע, פאנל הניהול והתצוגה המקדימה חייבים לצייר מאותו
+   מקור. רשימה משוכפלת מתחילה זהה ונפרדת תוך שבועיים.
+   חמש מהערכות נגזרו מזהות האתר עצמו — ירוק הניווט, תכלת האיורים, ירוק הדשא
+   והצהוב של הדירוגים — כדי שהפופאפ ירגיש חלק מהעמוד ולא דבוק עליו.
+   שדה bgAnim: none | drift | bubbles | aurora | sheen  (ראה css() במנוע). */
+(function (w) {
+  w.HYDROPOP_PRESETS = [
+    { id: 'hydro', name: 'הידרו האוס', desc: 'ירוק הניווט של האתר. ברירת המחדל הבטוחה.',
+      theme: { primary: '#2E9B45', primaryDark: '#1F7A32', accent: '#8CC63E', accentGlow: 'rgba(140,198,62,.45)',
+        ink: '#132A17', inkSoft: '#4A6B52', surface: '#FFFFFF', surfaceAlt: '#F2F9F1',
+        border: '#D8EBD5', overlay: 'rgba(12,38,18,.62)', radius: '22px', bgAnim: 'none' } },
+
+    { id: 'sky', name: 'שמיים ודשא', desc: 'התכלת מהאיורים באתר. אוורירי, מרגיש כמו המחשה ולא כמו פרסומת.',
+      theme: { primary: '#2E9B45', primaryDark: '#1F7A32', accent: '#7FD4F0', accentGlow: 'rgba(127,212,240,.5)',
+        ink: '#14303A', inkSoft: '#4A6A76', surface: '#FFFFFF', surfaceAlt: '#EAF6FC',
+        border: '#CDE9F5', overlay: 'rgba(16,48,60,.58)', radius: '26px', bgAnim: 'drift' } },
+
+    { id: 'garden', name: 'גינה חיה', desc: 'ירוק עמוק עם בועות מרחפות. הכי "צומח" מבין השמונה.',
+      theme: { primary: '#1F7A32', primaryDark: '#14561F', accent: '#A8DC5B', accentGlow: 'rgba(168,220,91,.5)',
+        ink: '#0F2614', inkSoft: '#41634A', surface: '#FBFEF8', surfaceAlt: '#EEF8E6',
+        border: '#D6EBC7', overlay: 'rgba(10,32,16,.66)', radius: '24px', bgAnim: 'bubbles' } },
+
+    { id: 'aurora', name: 'זוהר', desc: 'רקע נע ומשתנה. תופס את העין הכי חזק — ולכן גם הכי קל להגזים איתו.',
+      theme: { primary: '#0F8A5F', primaryDark: '#0A6444', accent: '#9BE564', accentGlow: 'rgba(155,229,100,.55)',
+        ink: '#08251C', inkSoft: '#3F6155', surface: '#FFFFFF', surfaceAlt: '#F0FAF4',
+        border: '#D5EDE0', overlay: 'rgba(4,26,18,.7)', radius: '28px', bgAnim: 'aurora' } },
+
+    { id: 'night', name: 'לילה', desc: 'כהה. בולט מאוד על רקע אתר בהיר, אבל דורש בדיקה — לא לכולם נוח.',
+      theme: { primary: '#3FD98A', primaryDark: '#2FB870', accent: '#8CC63E', accentGlow: 'rgba(63,217,138,.35)',
+        ink: '#EAF6EE', inkSoft: '#9DBCA9', surface: '#12211A', surfaceAlt: '#1B2E24',
+        border: '#2C4437', overlay: 'rgba(2,12,8,.78)', radius: '20px', bgAnim: 'aurora' } },
+
+    { id: 'clean', name: 'נקי', desc: 'לבן, אפור, ונגיעת ירוק אחת. כשרוצים שהתוכן ידבר ולא העיצוב.',
+      theme: { primary: '#2E9B45', primaryDark: '#1F7A32', accent: '#2E9B45', accentGlow: 'rgba(46,155,69,.25)',
+        ink: '#1A1A1A', inkSoft: '#6B7280', surface: '#FFFFFF', surfaceAlt: '#F7F8F7',
+        border: '#E5E7EB', overlay: 'rgba(0,0,0,.55)', radius: '14px', bgAnim: 'none' } },
+
+    { id: 'warm', name: 'חם', desc: 'אדמדם-חמרה. מנוגד לכל האתר — ולכן שווה כווריאנט B בניסוי.',
+      theme: { primary: '#D9552F', primaryDark: '#B33F1E', accent: '#FFC629', accentGlow: 'rgba(255,198,41,.5)',
+        ink: '#2B1710', inkSoft: '#6B4A3C', surface: '#FFFCF7', surfaceAlt: '#FCF2E6',
+        border: '#F0DCC4', overlay: 'rgba(38,18,10,.62)', radius: '22px', bgAnim: 'sheen' } },
+
+    /* שתי הערכות הבאות נגזרו ישירות מסרטון האנימציה של הידרו האוס:
+       תכלת-מנטה של השמיים, עננים לבנים רכים, פס דשא בתחתית, וצמיחה איטית
+       כלפי מעלה. מי שראה את הסרטון יזהה מיד שזה אותו עולם. */
+    { id: 'toon', name: 'סרטון', desc: 'התכלת והעננים מהסרטון שלכם. עננים נעים לאט ברקע.',
+      theme: { primary: '#3FA34D', primaryDark: '#2C7A38', accent: '#8CC63E', accentGlow: 'rgba(140,198,62,.4)',
+        ink: '#1B3A2A', inkSoft: '#4F7263', surface: '#FFFFFF', surfaceAlt: '#CFECEC',
+        border: '#B4DEDE', overlay: 'rgba(18,58,58,.55)', radius: '26px', bgAnim: 'clouds' } },
+
+    { id: 'grow', name: 'צומח', desc: 'עלים שמתנדנדים ועולים מלמטה, כמו הצמחים בסרטון.',
+      theme: { primary: '#3FA34D', primaryDark: '#2C7A38', accent: '#7ED957', accentGlow: 'rgba(126,217,87,.45)',
+        ink: '#16331F', inkSoft: '#4B6B54', surface: '#FBFFFA', surfaceAlt: '#D8F0E4',
+        border: '#BEE3CD', overlay: 'rgba(14,44,26,.58)', radius: '24px', bgAnim: 'sprout' } },
+
+    /* --- שבע ערכות תנועה חזקה. לכל אחת נושא אחד ברור, כדי שהבחירה תהיה
+       "איזה סיפור מספרים" ולא "איזה צבע יפה". התנועה כאן מסיבית ומורגשת —
+       מי שרוצה עדין יבחר "סרטון" או "צומח". --- */
+    { id: 'tomato', name: '🍅 עגבניות', desc: 'עגבניות שעולות מהקרקע בקצב מהיר. חם, שופע, בלתי אפשרי להתעלם.',
+      theme: { primary: '#D8342A', primaryDark: '#A82219', accent: '#8CC63E', accentGlow: 'rgba(216,52,42,.4)',
+        ink: '#2A1210', inkSoft: '#6B4741', surface: '#FFFFFF', surfaceAlt: '#CFECEC',
+        border: '#F0D2CE', overlay: 'rgba(42,18,16,.6)', radius: '24px', bgAnim: 'tomato' } },
+
+    { id: 'berry', name: '🍓 תותים', desc: 'תותים שמרחפים כלפי מעלה. הכי מתוק ומזמין מכולם.',
+      theme: { primary: '#E8455F', primaryDark: '#B92C44', accent: '#7ED957', accentGlow: 'rgba(232,69,95,.38)',
+        ink: '#2E1218', inkSoft: '#70464F', surface: '#FFFCFD', surfaceAlt: '#FBE4EA',
+        border: '#F4C9D3', overlay: 'rgba(46,18,24,.6)', radius: '26px', bgAnim: 'berry' } },
+
+    { id: 'lettuce', name: '🥬 חסה', desc: 'עלים ירוקים שנפרשים ונושמים. רגוע יחסית לשאר החבורה.',
+      theme: { primary: '#4CA83F', primaryDark: '#33772A', accent: '#B7E06B', accentGlow: 'rgba(183,224,107,.5)',
+        ink: '#16311A', inkSoft: '#4C6B4E', surface: '#FCFFFA', surfaceAlt: '#E4F5DA',
+        border: '#C9E7B8', overlay: 'rgba(18,44,22,.58)', radius: '24px', bgAnim: 'lettuce' } },
+
+    { id: 'tower', name: '🗼 מגדל הידרופוני', desc: 'המגדל מסתובב והשתילים נעים כלפי מעלה. המוצר עצמו כרקע.',
+      theme: { primary: '#2E9B45', primaryDark: '#1F7A32', accent: '#5FC4DE', accentGlow: 'rgba(95,196,222,.45)',
+        ink: '#12303A', inkSoft: '#496872', surface: '#FFFFFF', surfaceAlt: '#CFECEC',
+        border: '#B7DFE6', overlay: 'rgba(16,46,56,.6)', radius: '20px', bgAnim: 'tower' } },
+
+    { id: 'water', name: '💧 מים זורמים', desc: 'זרימה חזקה ומהירה. הכי אגרסיבי בספרייה — ובדיוק מה שהמערכת עושה.',
+      theme: { primary: '#1B9AAA', primaryDark: '#13707C', accent: '#7ED957', accentGlow: 'rgba(27,154,170,.42)',
+        ink: '#0E2F35', inkSoft: '#456C74', surface: '#FFFFFF', surfaceAlt: '#DFF4FA',
+        border: '#B6E2EC', overlay: 'rgba(10,42,48,.62)', radius: '22px', bgAnim: 'water' } },
+
+    { id: 'roots', name: '🌱 טפטוף ושורשים', desc: 'טיפות שנופלות ושורשים שמתפשטים. מדגיש את הטכנולוגיה ולא את הפרי.',
+      theme: { primary: '#2E9B45', primaryDark: '#1F7A32', accent: '#5FC4DE', accentGlow: 'rgba(95,196,222,.4)',
+        ink: '#14301F', inkSoft: '#4B6B58', surface: '#FBFEFC', surfaceAlt: '#DCEFE8',
+        border: '#BEDFD3', overlay: 'rgba(14,44,30,.6)', radius: '22px', bgAnim: 'roots' } },
+
+    { id: 'green', name: '🏡 חממה', desc: 'קרני שמש שסורקות שורות גידול. הכי "מקצועי" — מתאים לקהל עסקי.',
+      theme: { primary: '#3FA34D', primaryDark: '#2C7A38', accent: '#FFC629', accentGlow: 'rgba(255,198,41,.45)',
+        ink: '#1E3320', inkSoft: '#556F58', surface: '#FFFFFF', surfaceAlt: '#E8F3DE',
+        border: '#CFE4BE', overlay: 'rgba(22,44,26,.58)', radius: '18px', bgAnim: 'green' } },
+
+    { id: 'bold', name: 'נועז', desc: 'ניגודיות גבוהה ופינות חדות. הכי "עכשיו" — ולא לכל קהל.',
+      theme: { primary: '#111827', primaryDark: '#000000', accent: '#8CC63E', accentGlow: 'rgba(140,198,62,.45)',
+        ink: '#0B0F14', inkSoft: '#54606E', surface: '#FFFFFF', surfaceAlt: '#F3F4F6',
+        border: '#D8DCE2', overlay: 'rgba(0,0,0,.66)', radius: '6px', bgAnim: 'sheen' } }
+  ];
+})(typeof window !== 'undefined' ? window : this);
+
 /* =============================================================================
  * HydroPop Engine v1.0.0
  * מנוע פופאפים + שאלונים + אנליטיקות + A/B testing לאתרי מסחר.
@@ -45,6 +146,39 @@
         return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
       });
     },
+    /**
+     * התאמה אישית בטקסט: {{key}} או {{key|ברירת מחדל}}.
+     * מוחלף בתווית **הקצרה** של התשובה שנבחרה (report אם הוגדר, אחרת label),
+     * לא בערך הגולמי — "עגבניות" ולא "fruiting".
+     * חסר ערך ואין ברירת מחדל → הסימון נעלם והרווחים מתנקים, כי משפט
+     * שבור גרוע יותר ממשפט גנרי.
+     */
+    fill: function (txt, answers, quiz) {
+      var s = String(txt == null ? '' : txt);
+      if (s.indexOf('{{') === -1) return s;
+      var labelOf = function (key, val) {
+        var out = null;
+        ((quiz && quiz.steps) || []).forEach(function (st) {
+          if (st.key !== key) return;
+          (st.options || []).forEach(function (o) {
+            if (out === null && String(o.value) === String(val)) out = o.report || o.label;
+          });
+        });
+        return out;
+      };
+      s = s.replace(/\{\{\s*([\w.]+)\s*(?:\|([^}]*))?\}\}/g, function (m, key, def) {
+        var v = (answers || {})[key];
+        if (Object.prototype.toString.call(v) === '[object Array]') {
+          var parts = v.map(function (x) { return labelOf(key, x) || x; });
+          return parts.length ? parts.join(' ו') : (def == null ? '' : def);
+        }
+        if (v === undefined || v === null || v === '') return def == null ? '' : def;
+        return labelOf(key, v) || String(v);
+      });
+      // ניקוי שאריות: רווחים כפולים, ורווח לפני פיסוק
+      return s.replace(/\s{2,}/g, ' ').replace(/\s+([,.!?:;])/g, '$1').trim();
+    },
+
     // hash דטרמיניסטי (FNV-1a) — לחלוקת וריאנטים יציבה לאותו מבקר
     hash: function (str) {
       var h = 2166136261;
@@ -525,9 +659,154 @@
 .wrap[data-layout="bar"].in .card{transform:none;}
 
 /* פס דקורטיבי עליון */
-.card::before{content:'';position:absolute;top:0;inset-inline:0;height:4px;
+.card::before{content:'';position:absolute;top:0;inset-inline:0;height:4px;z-index:3;
  background:linear-gradient(90deg,${t.primary},${t.accent},${t.primary});background-size:200% 100%;animation:hp-flow 6s linear infinite;}
 @keyframes hp-flow{to{background-position:-200% 0;}}
+
+/* ---- רקע חי ----
+   שכבה דקורטיבית מתחת לתוכן. שלושה כללים שלא מתפשרים עליהם:
+   1. pointer-events:none — לעולם לא חוסמת קליק על כפתור.
+   2. prefers-reduced-motion — מי שביקש פחות תנועה מקבל רקע סטטי. תנועה
+      מתמדת היא טריגר למיגרנה ולסחרחורת, וזה לא עניין של טעם.
+   3. z-index — התוכן תמיד מעל. רקע שמסתיר טקסט הוא באג, לא אפקט. */
+.bg{position:absolute;inset:0;z-index:0;pointer-events:none;overflow:hidden;border-radius:inherit;}
+.card>.x,.card>.prog,.card>.body{position:relative;z-index:2;}
+
+.card[data-bg="aurora"] .bg{background:
+ radial-gradient(60% 55% at 20% 15%,${t.accentGlow},transparent 70%),
+ radial-gradient(55% 50% at 85% 25%,${t.primary}38,transparent 70%),
+ radial-gradient(65% 60% at 50% 100%,${t.accent}30,transparent 70%);
+ background-size:180% 180%,170% 170%,160% 160%;animation:hp-aurora 18s ease-in-out infinite alternate;}
+@keyframes hp-aurora{
+ 0%{background-position:0% 0%,100% 0%,50% 100%;}
+ 50%{background-position:60% 40%,20% 60%,80% 30%;}
+ 100%{background-position:100% 60%,0% 100%,10% 0%;}}
+
+.card[data-bg="drift"] .bg{background:linear-gradient(125deg,${t.surfaceAlt},${t.accent}2E,${t.primary}24,${t.surfaceAlt});
+ background-size:300% 300%;animation:hp-drift 22s ease infinite;}
+@keyframes hp-drift{0%{background-position:0% 50%;}50%{background-position:100% 50%;}100%{background-position:0% 50%;}}
+
+.card[data-bg="bubbles"] .bg::before,.card[data-bg="bubbles"] .bg::after{content:'';position:absolute;
+ border-radius:50%;background:radial-gradient(circle at 32% 30%,${t.accent}55,${t.primary}22 60%,transparent 72%);}
+.card[data-bg="bubbles"] .bg::before{width:190px;height:190px;left:-50px;bottom:-60px;animation:hp-float 15s ease-in-out infinite;}
+.card[data-bg="bubbles"] .bg::after{width:130px;height:130px;right:-38px;top:-30px;animation:hp-float 19s ease-in-out infinite reverse;}
+@keyframes hp-float{0%,100%{transform:translate(0,0) scale(1);}
+ 33%{transform:translate(24px,-20px) scale(1.09);}66%{transform:translate(-18px,16px) scale(.94);}}
+
+.card[data-bg="sheen"] .bg{background:linear-gradient(100deg,transparent 38%,${t.accent}3D 50%,transparent 62%);
+ background-size:250% 100%;animation:hp-sheen 7s ease-in-out infinite;}
+@keyframes hp-sheen{0%{background-position:130% 0;}55%,100%{background-position:-30% 0;}}
+
+/* עננים — נגזר מסרטון האנימציה של הידרו האוס: תכלת-מנטה, עננים לבנים רכים
+   שנעים לאט, ופס דשא בתחתית. הכל צורות CSS, בלי תמונה ובלי תלות חיצונית. */
+.card[data-bg="clouds"] .bg{background:linear-gradient(180deg,${t.surfaceAlt} 0%,${t.surfaceAlt} 72%,${t.accent}5C 72%,${t.accent}42 100%);}
+.card[data-bg="clouds"] .bg::before,.card[data-bg="clouds"] .bg::after{content:'';position:absolute;
+ background:radial-gradient(circle at 22% 62%,#fff 0 26px,transparent 27px),
+            radial-gradient(circle at 46% 42%,#fff 0 34px,transparent 35px),
+            radial-gradient(circle at 72% 60%,#fff 0 24px,transparent 25px),
+            linear-gradient(#fff,#fff) 18% 74%/62% 26px no-repeat;
+ width:300px;height:110px;opacity:.9;filter:blur(.3px);}
+.card[data-bg="clouds"] .bg::before{top:6%;animation:hp-cloud 34s linear infinite;}
+.card[data-bg="clouds"] .bg::after{top:34%;transform:scale(.7);opacity:.6;animation:hp-cloud 52s linear infinite reverse;}
+@keyframes hp-cloud{from{inset-inline-start:-320px;}to{inset-inline-start:105%;}}
+
+/* צומח — עלים שמתנדנדים ועולים מקו הקרקע, כמו הצמחים שמטפסים בסרטון */
+.card[data-bg="sprout"] .bg{background:linear-gradient(180deg,transparent 55%,${t.accent}30 100%);}
+.card[data-bg="sprout"] .bg::before,.card[data-bg="sprout"] .bg::after{content:'';position:absolute;bottom:-14px;
+ width:120px;height:120px;border-radius:0 78% 0 78%;background:linear-gradient(140deg,${t.accent}70,${t.primary}40);
+ transform-origin:bottom center;}
+.card[data-bg="sprout"] .bg::before{inset-inline-start:-26px;animation:hp-sway 11s ease-in-out infinite;}
+.card[data-bg="sprout"] .bg::after{inset-inline-end:-30px;width:92px;height:92px;border-radius:78% 0 78% 0;
+ animation:hp-sway 14s ease-in-out infinite reverse;}
+@keyframes hp-sway{0%,100%{transform:rotate(-5deg) translateY(0);}50%{transform:rotate(6deg) translateY(-9px);}}
+
+/* ===== ערכות תנועה חזקה — נושא אחד ברור לכל אחת =====
+   כולן צורות CSS בלבד: אפס תמונות, אפס בקשות רשת, אפס תלויות.
+   מונפשות ב-transform או ב-background-position, שהדפדפן מריץ בכרטיס המסך. */
+
+/* 🍅 עגבניות עולות מהקרקע */
+.card[data-bg="tomato"] .bg{background:linear-gradient(180deg,${t.surfaceAlt} 0 74%,${t.accent}55 74%,${t.accent}30 100%);}
+.card[data-bg="tomato"] .bg::before{content:'';position:absolute;inset:-25% -12%;
+ background-image:
+  radial-gradient(circle at 50% 52%,#E23B2E 0 15px,transparent 16px),
+  radial-gradient(circle at 50% 48%,#F2685A 0 11px,transparent 12px),
+  radial-gradient(circle at 50% 50%,#C82F24 0 19px,transparent 20px);
+ background-size:118px 152px,86px 124px,164px 186px;
+ background-position:6% 0,42% 22px,76% 54px;animation:hp-rise 7s linear infinite;}
+@keyframes hp-rise{to{background-position:6% -152px,42% -102px,76% -132px;}}
+
+/* 🍓 תותים מרחפים */
+.card[data-bg="berry"] .bg{background:linear-gradient(180deg,${t.surfaceAlt},#FFF6F8);}
+.card[data-bg="berry"] .bg::before{content:'';position:absolute;inset:-25% -12%;
+ background-image:
+  radial-gradient(circle at 50% 45%,#E8455F 0 13px,transparent 14px),
+  radial-gradient(circle at 50% 45%,#FF7C8E 0 9px,transparent 10px),
+  radial-gradient(circle at 50% 55%,#C8324A 0 16px,transparent 17px);
+ background-size:104px 138px,78px 112px,146px 168px;
+ background-position:12% 0,52% 40px,84% 12px;animation:hp-rise2 6s linear infinite;}
+@keyframes hp-rise2{to{background-position:12% -138px,52% -72px,84% -156px;}}
+
+/* 🥬 עלי חסה שנפרשים */
+.card[data-bg="lettuce"] .bg{background:radial-gradient(120% 90% at 50% 110%,${t.accent}5E,${t.surfaceAlt} 62%);}
+.card[data-bg="lettuce"] .bg::before,.card[data-bg="lettuce"] .bg::after{content:'';position:absolute;
+ inset-inline-start:50%;bottom:-46%;width:150%;padding-bottom:150%;margin-inline-start:-75%;
+ border-radius:50%;border:14px solid ${t.primary}2E;animation:hp-unfurl 6.5s ease-in-out infinite;}
+.card[data-bg="lettuce"] .bg::after{border-color:${t.accent}55;animation-delay:-3.2s;}
+@keyframes hp-unfurl{0%,100%{transform:scale(.62) rotate(-6deg);opacity:.35;}
+ 50%{transform:scale(1) rotate(7deg);opacity:.95;}}
+
+/* 🗼 מגדל הידרופוני — השתילים נעים כלפי מעלה */
+.card[data-bg="tower"] .bg{background:linear-gradient(180deg,${t.surfaceAlt},#BCE2E2);}
+.card[data-bg="tower"] .bg::before{content:'';position:absolute;top:-8%;bottom:-8%;inset-inline-start:50%;
+ width:104px;margin-inline-start:-52px;background:linear-gradient(90deg,#EDF7F7,#fff 35%,#DCEEEE);
+ border-radius:16px;box-shadow:0 0 34px rgba(0,0,0,.07);}
+.card[data-bg="tower"] .bg::after{content:'';position:absolute;top:-8%;bottom:-8%;inset-inline-start:50%;
+ width:104px;margin-inline-start:-52px;
+ background-image:
+  radial-gradient(circle at 25% 50%,#6B4B33 0 7px,transparent 8px),
+  radial-gradient(circle at 75% 50%,#6B4B33 0 7px,transparent 8px),
+  radial-gradient(circle at 25% 50%,${t.primary}CC 0 4px,transparent 5px),
+  radial-gradient(circle at 75% 50%,${t.primary}CC 0 4px,transparent 5px);
+ background-size:104px 48px,104px 48px,104px 48px,104px 48px;
+ background-position:0 0,0 24px,0 -13px,0 11px;animation:hp-tower 2.8s linear infinite;}
+@keyframes hp-tower{to{background-position:0 -48px,0 -24px,0 -61px,0 -37px;}}
+
+/* 💧 מים זורמים — הכי אגרסיבי */
+.card[data-bg="water"] .bg{background:linear-gradient(180deg,${t.surfaceAlt},#A8DFEC);}
+.card[data-bg="water"] .bg::before{content:'';position:absolute;inset:-40%;
+ background:repeating-linear-gradient(100deg,transparent 0 24px,rgba(255,255,255,.6) 24px 33px,transparent 33px 66px);
+ animation:hp-flowx 2.4s linear infinite;}
+.card[data-bg="water"] .bg::after{content:'';position:absolute;inset:-40%;
+ background:repeating-linear-gradient(84deg,transparent 0 38px,${t.primary}3D 38px 50px,transparent 50px 98px);
+ animation:hp-flowx 3.9s linear infinite reverse;}
+@keyframes hp-flowx{to{transform:translateX(-132px);}}
+
+/* 🌱 טפטוף ושורשים */
+.card[data-bg="roots"] .bg{background:linear-gradient(180deg,${t.surfaceAlt} 0 62%,${t.primary}22 100%);}
+.card[data-bg="roots"] .bg::before{content:'';position:absolute;inset:-30% 0;
+ background-image:
+  radial-gradient(ellipse 4px 9px at 50% 50%,${t.accent}D9,transparent 60%),
+  radial-gradient(ellipse 3px 7px at 50% 50%,#7FD4F0BB,transparent 60%);
+ background-size:74px 108px,52px 86px;background-position:10% 0,58% 30px;
+ animation:hp-drip 1.9s linear infinite;}
+.card[data-bg="roots"] .bg::after{content:'';position:absolute;inset-inline:-10%;bottom:-30px;height:120px;
+ background:repeating-conic-gradient(from 210deg at 50% 0,${t.primary}33 0 4deg,transparent 4deg 14deg);
+ opacity:.55;animation:hp-spread 8s ease-in-out infinite;}
+@keyframes hp-drip{to{background-position:10% 108px,58% 116px;}}
+@keyframes hp-spread{0%,100%{transform:scaleY(.82);}50%{transform:scaleY(1.12);}}
+
+/* 🏡 חממה — קרני שמש סורקות שורות גידול */
+.card[data-bg="green"] .bg{background:linear-gradient(180deg,${t.surfaceAlt},#F7FBF2);}
+.card[data-bg="green"] .bg::before{content:'';position:absolute;inset:0;
+ background:repeating-linear-gradient(180deg,transparent 0 28px,${t.primary}1F 28px 32px,transparent 32px 60px);}
+.card[data-bg="green"] .bg::after{content:'';position:absolute;inset:-40%;
+ background:linear-gradient(74deg,transparent 40%,${t.accent}66 50%,transparent 60%);
+ animation:hp-sun 5.5s ease-in-out infinite;}
+@keyframes hp-sun{0%{transform:translateX(60%);}55%,100%{transform:translateX(-60%);}}
+
+@media (prefers-reduced-motion:reduce){
+ .bg,.bg::before,.bg::after,.card::before{animation:none!important;}
+}
 
 .x{position:absolute;top:12px;inset-inline-start:12px;width:34px;height:34px;border:0;border-radius:50%;
  background:${t.surfaceAlt};color:${t.inkSoft};font-size:19px;line-height:1;cursor:pointer;display:grid;place-items:center;
@@ -609,7 +888,65 @@ input[aria-invalid="true"] ~ .err{display:block;}
 .copy:hover{background:${t.primaryDark};}
 .copy.done{background:${t.accent};color:${t.ink};}
 
+/* המלצת מוצר */
+.reco{display:flex;flex-direction:column;gap:12px;margin:18px 0 6px;padding:16px;border-radius:16px;
+ background:${t.surfaceAlt};border:1.5px solid ${t.border};text-align:start;}
+.reco-img{width:100%;max-height:170px;object-fit:cover;border-radius:12px;}
+.reco-body{display:flex;flex-direction:column;}
+.reco-eyebrow{font-size:11.5px;font-weight:800;letter-spacing:.4px;color:${t.primary};margin-bottom:4px;}
+.reco-name{font-size:16.5px;font-weight:800;color:${t.ink};margin-bottom:3px;}
+.reco-tag{font-size:13px;color:${t.inkSoft};line-height:1.5;}
+.reco-actions{display:flex;flex-direction:column;gap:8px;margin-top:12px;}
+.reco-actions .btn{margin-top:0;text-decoration:none;display:block;text-align:center;box-sizing:border-box;}
+.btn.wa{background:#25D366;}
+.btn.wa:hover{background:#1DA851;}
+
 /* ===== סגנון "שאלון ממותג" (camp.ui) ===== */
+/* ===== תצוגת שיחה (variant.render='chat') ===== */
+.chead{display:flex;align-items:center;gap:7px;padding:0 0 10px;border-bottom:1px solid ${t.border};margin-bottom:10px;}
+.chead img{height:26px;border-radius:6px;}
+.chead .ct{font-size:14px;font-weight:800;color:${t.ink};}
+.chead .cs{font-size:10.5px;color:${t.inkSoft};}
+.chead .con{margin-inline-start:auto;font-size:10.5px;font-weight:700;color:${t.primary};display:flex;align-items:center;gap:4px;}
+.chead .con::before{content:'';width:6px;height:6px;border-radius:50%;background:${t.primary};box-shadow:0 0 0 3px ${t.accentGlow};}
+.cbar{height:4px;border-radius:99px;background:${t.surfaceAlt};overflow:hidden;margin-bottom:10px;}
+.cbar i{display:block;height:100%;background:linear-gradient(90deg,${t.primary},${t.accent});transition:width .45s cubic-bezier(.2,.8,.25,1);}
+.clog{display:flex;flex-direction:column;gap:8px;max-height:min(46vh,320px);overflow-y:auto;padding:2px 2px 8px;scroll-behavior:smooth;}
+.cmsg{display:flex;align-items:flex-end;gap:6px;animation:hp-rise .32s cubic-bezier(.2,.9,.3,1) both;}
+.cmsg.me{flex-direction:row-reverse;}
+.cav{width:22px;height:22px;flex:none;border-radius:50%;background:${t.primary};color:#fff;font-size:11px;font-weight:800;display:grid;place-items:center;}
+.cb{max-width:82%;padding:9px 12px;border-radius:15px;font-size:14px;line-height:1.5;
+ background:${t.surfaceAlt};color:${t.ink};border-end-start-radius:5px;}
+.cmsg.me .cb{background:${t.primary};color:#fff;border-end-start-radius:15px;border-end-end-radius:5px;font-weight:600;}
+.cb .cl{display:block;}
+.cb .cl.sub{font-size:12.5px;opacity:.8;margin-top:3px;}
+.cb.typing{display:flex;gap:4px;padding:12px 13px;}
+.cb.typing i{width:6px;height:6px;border-radius:50%;background:${t.inkSoft};opacity:.45;animation:hp-typ 1.1s infinite;}
+.cb.typing i:nth-child(2){animation-delay:.16s;}
+.cb.typing i:nth-child(3){animation-delay:.32s;}
+@keyframes hp-typ{0%,60%,100%{transform:translateY(0);opacity:.35}30%{transform:translateY(-4px);opacity:.9}}
+@keyframes hp-rise{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+.cin{margin-top:10px;}
+.cin[hidden]{display:none;}
+/* בשיחה האפשרויות הן שבבים — אבל חייבות להיראות **לחיצות**: מסגרת בצבע
+   המותג, רקע, וצל קל. שבב שטוח נקרא כטקסט ולא כתשובה. */
+.cin{display:flex;flex-direction:column;gap:8px;}
+.cin .opts{flex-direction:row;flex-wrap:wrap;display:flex;gap:8px;justify-content:flex-end;}
+.cin .opt{width:auto;flex:0 1 auto;padding:10px 15px;border-radius:999px;font-size:13.5px;font-weight:700;
+ background:${t.surface};border:1.5px solid ${t.primary};color:${t.primary};
+ box-shadow:0 2px 8px -4px ${t.primary};}
+.cin .opt .rad,.cin .opt .dsc{display:none;}
+.cin .opt .ic{font-size:16px;}
+.cin .opt:hover{background:${t.primary};color:#fff;transform:translateY(-2px);}
+.cin .opt:hover .ic{filter:brightness(1.2);}
+.cin .opt[aria-pressed="true"]{background:${t.primary};color:#fff;}
+.cin .opts.grid2{grid-template-columns:none;}
+/* רמז עדין שיש כאן מה ללחוץ */
+.ctap{font-size:11px;color:${t.inkSoft};text-align:center;opacity:.75;}
+.cback{align-self:flex-start;background:0;border:0;font:inherit;font-size:12.5px;font-weight:700;
+ color:${t.inkSoft};cursor:pointer;padding:4px 2px;}
+.cback:hover{color:${t.primary};text-decoration:underline;}
+
 .card.quiz{background:linear-gradient(168deg,#F3FBF2,#E2F3E4 55%,#D5EDDA);}
 .card.quiz::before{display:none;}
 .card.quiz .body{padding:26px 22px 20px;}
@@ -705,7 +1042,9 @@ input[aria-invalid="true"] ~ .err{display:block;}
       this.wrap.setAttribute('aria-label', camp.name || 'הודעה');
       this.wrap.innerHTML =
         '<div class="ovl" data-act="overlay"></div>' +
-        '<div class="card' + (ui ? ' quiz' : '') + '"><button class="x" data-act="close" aria-label="סגירה">✕</button>' +
+        '<div class="card' + (ui ? ' quiz' : '') + '" data-bg="' + (t.bgAnim || 'none') + '">' +
+        (t.bgAnim && t.bgAnim !== 'none' ? '<div class="bg" aria-hidden="true"></div>' : '') +
+        '<button class="x" data-act="close" aria-label="סגירה">✕</button>' +
         '<div class="prog" hidden><i style="width:0"></i></div>' +
         '<div class="body"></div></div>';
 
@@ -769,6 +1108,75 @@ input[aria-invalid="true"] ~ .err{display:block;}
     }
   };
 
+  /* --- Reco: מנוע המלצת מוצר למסך התוצאה. הכלל הראשון שמתאים מנצח;
+     בלי כלל תואם — נופל ל-answers.product (הבחירה הישירה בענפי מוצר),
+     ואז ל-defaultProductId. --- */
+  var Reco = {
+    matchCond: function (cond, answers) {
+      var v = answers[cond.key];
+      if (cond.op === 'exists') return v !== undefined && v !== null && v !== '';
+      if (cond.op === 'neq') return String(v == null ? '' : v) !== String(cond.value);
+      if (cond.op === 'in') {
+        var list = String(cond.value || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean);
+        return list.indexOf(String(v == null ? '' : v)) !== -1;
+      }
+      return String(v == null ? '' : v) === String(cond.value);
+    },
+    matchRule: function (rule, answers) {
+      if (rule.enabled === false) return false;
+      var conds = rule.when || [];
+      for (var i = 0; i < conds.length; i++) if (!this.matchCond(conds[i], answers)) return false;
+      return true;
+    },
+    /**
+     * ההכרעה המלאה, כולל **למה**. הסיבה נשלחת לאנליטיקות: בלעדיה "0 לחיצות"
+     * נראה כמו כשל של הכרטיס, כשבפועל ייתכן שהוא פשוט מעולם לא הוצג.
+     * reason: off · step_off · suppressed · rule · answer · default ·
+     *         catalog_miss (הגולש בחר מוצר שאין לו רשומה בקטלוג) · no_match
+     */
+    explain: function (answers) {
+      var rc = CFG.recommendation;
+      if (!rc || rc.enabled === false) return { product: null, reason: 'off' };
+      var byId = {};
+      (CFG.productCatalog || []).forEach(function (p) { byId[p.id] = p; });
+      var rules = rc.rules || [];
+      for (var i = 0; i < rules.length; i++) {
+        var r = rules[i];
+        if (!this.matchRule(r, answers)) continue;
+        // כלל השבתה גובר על הכל, כולל הבחירה הישירה בשאלון וברירת המחדל:
+        // "מעל סכום X — בלי כרטיס מוצר, רק חזרה טלפונית".
+        if (r.suppress) return { product: null, reason: 'suppressed', rule: r.id || ('#' + (i + 1)) };
+        if (r.productId && byId[r.productId]) return { product: byId[r.productId], reason: 'rule', rule: r.id || ('#' + (i + 1)) };
+      }
+      if (answers.product && byId[answers.product]) return { product: byId[answers.product], reason: 'answer' };
+      if (rc.defaultProductId && byId[rc.defaultProductId]) return { product: byId[rc.defaultProductId], reason: 'default' };
+      // הגולש בחר מוצר בשאלון אבל אין לו רשומה בקטלוג — תקלת הגדרות שקטה,
+      // ולכן היא מקבלת סיבה משלה ולא מתחבאת בתוך "לא נמצאה התאמה".
+      return { product: null, reason: answers.product ? 'catalog_miss' : 'no_match' };
+    },
+    resolve: function (answers) { return this.explain(answers).product; },
+    /* תבנית הודעת וואטסאפ: כלל (פעיל, עם waTemplate, שמתאים) גובר על ברירת
+       המחדל הגלובלית. עצמאי מבחירת המוצר — כלל יכול לשאת רק תבנית, בלי productId.
+       כללי השבתה מדולגים: אין להם כרטיס להציג, ואסור שתבנית שנשמרה בהם פעם
+       תכתיב את הנוסח של כרטיס שכלל אחר הביא. */
+    waTemplate: function (answers) {
+      var rc = CFG.recommendation || {};
+      var rules = rc.rules || [];
+      for (var i = 0; i < rules.length; i++) {
+        if (rules[i].waTemplate && !rules[i].suppress && this.matchRule(rules[i], answers)) return rules[i].waTemplate;
+      }
+      return rc.whatsappTemplate || 'היי, מעוניין/ת ב-{product}';
+    },
+    waLink: function (p, answers) {
+      var rc = CFG.recommendation || {};
+      var num = String(rc.whatsappNumber || '').replace(/[^\d]/g, '');
+      if (!num) return '';
+      var tpl = this.waTemplate(answers || {});
+      var text = tpl.split('{product}').join(p.name || '');
+      return 'https://wa.me/' + num + '?text=' + encodeURIComponent(text);
+    }
+  };
+
   /* ==========================================================================
    * 9. Flow — ניהול שלבים, ולידציה, שליחה
    * ======================================================================== */
@@ -793,8 +1201,30 @@ input[aria-invalid="true"] ~ .err{display:block;}
       this.quiz = quiz;
       this.ui = camp.ui || (quiz && quiz.ui) || null;
       this.steps = (quiz ? quiz.steps : variant.steps) || [];
+
+      /* ווריאנט בלי שלבים — בדרך כלל quizRef שמצביע על שאלון שנמחק או ששמו
+         שונה. עד כאן זה נגמר בפופאפ ריק שנתקע על המסך: popup_view נשלח,
+         render() נזרק על שלב לא קיים, ו-step_view מעולם לא נשלח. יוצאים
+         לפני ההרכבה ולפני המונים, ומדווחים כדי שזה ייראה באנליטיקות. */
+      if (!this.steps.length) {
+        Analytics.track('popup_broken', {
+          campaign: camp.id, variant: variant.id,
+          quizRef: variant.quizRef || '', reason: 'no_steps', trigger: reason || ''
+        });
+        U.log('ווריאנט בלי שלבים — הפופאפ לא נפתח:', camp.id, variant.id, variant.quizRef);
+        this.camp = null; this.variant = null; this.steps = null;
+        return false;
+      }
       this.idx = 0; this.history = []; this.answers = {}; this.resumed = false;
       this.openedAt = U.now(); this.engaged = false; this.converted = false;
+      /* תצוגת שיחה — נקבעת ברמת הווריאנט כדי שתהיה ניתנת לבדיקת A/B מול
+         תצוגת המסכים על אותו שאלון בדיוק. */
+      this.chat = (variant.render || camp.render) === 'chat';
+      this.log = []; this.logStep = null; this.typing = false;
+      // נשמר כדי שכל אירוע בהמשך הסשן יישא את אותו טריגר. בלעדיו אירועי
+      // ההמלצה חסרי trigger, ומסנן אירועי הבדיקה בשרת מסנן את popup_view
+      // אבל לא אותם — ושני הדוחות מתבססים על אוכלוסיות שונות.
+      this.trigger = reason || '';
 
       // המשך מהמקום שנעצר (אם מופעל ורלוונטי)
       var rc = CFG.resume || {};
@@ -870,12 +1300,36 @@ input[aria-invalid="true"] ~ .err{display:block;}
     back: function () {
       if (!this.history.length) return;
       this.idx = this.history.pop();
+      /* בשיחה גם היומן חייב לחזור אחורה: מסירים את השאלה הנוכחית ואת
+         התשובה שהובילה אליה, ומסמנים שהשאלה הקודמת כבר רשומה כדי שלא
+         תיכתב פעמיים. בלי זה השיחה גדלה בכל "חזרה" ומאבדת היגיון. */
+      if (this.chat) {
+        while (this.log.length && this.log[this.log.length - 1].side === 'bot') this.log.pop();
+        if (this.log.length && this.log[this.log.length - 1].side === 'me') this.log.pop();
+        this.logStep = this.steps[this.idx].id;
+        this.typing = false;
+        var cur = this.steps[this.idx], self = this;
+        // אם השאלה שחוזרים אליה כבר לא ביומן (למשל אחרי שחזור) — נרשמת מחדש
+        if (!this.log.some(function (m) { return m.side === 'bot'; }) || !this.log.length) {
+          var q = [cur.eyebrow, cur.title, cur.subtitle].filter(Boolean)
+            .map(function (x) { return self.txt(x); });
+          if (q.length) this.log.push({ side: 'bot', lines: q });
+        }
+      }
       Analytics.track('step_back', { campaign: this.camp.id, variant: this.variant.id, step: this.steps[this.idx].id });
       this.render();
     },
 
     render: function () {
-      var s = this.steps[this.idx];
+      var s = this.steps && this.steps[this.idx];
+      // רשת ביטחון: שלב חסר סוגר בנקייה במקום לזרוק ולהשאיר פופאפ ריק על המסך
+      if (!s) {
+        Analytics.track('popup_broken', {
+          campaign: this.camp && this.camp.id, variant: this.variant && this.variant.id,
+          reason: 'missing_step', stepIndex: this.idx, trigger: this.trigger || ''
+        });
+        return this.close('broken');
+      }
       var ui = this.ui || null;
       UI.setProgress(!ui && s.progress ? this.progressPct() : null);
 
@@ -893,13 +1347,28 @@ input[aria-invalid="true"] ~ .err{display:block;}
 
       Analytics.track('step_view', { campaign: this.camp.id, variant: this.variant.id, step: s.id, stepIndex: this.idx, type: s.type });
 
+      // מכנה להמלצה: כמה בכלל ראו כרטיס מול כמה לא — ולמה לא.
+      // בלי זה "אחוז הלחיצות" הוא מספר בלי בסיס.
+      if (s.type === 'success') {
+        var rd = this.recoFor(s);
+        Analytics.track(rd.product ? 'reco_view' : 'reco_none', {
+          campaign: this.camp.id, variant: this.variant.id, step: s.id,
+          product: rd.product ? rd.product.id : '', reason: rd.reason, rule: rd.rule || '',
+          trigger: this.trigger || ''
+        });
+      }
+
       var inner = '';
       if (s.type === 'success') {
         inner = this.renderSuccess(s);
       } else {
-        if (s.eyebrow) inner += '<span class="eyebrow">' + U.esc(s.eyebrow) + '</span>';
-        if (s.title) inner += '<h2>' + U.esc(s.title) + '</h2>';
-        if (s.subtitle) inner += '<p class="sub">' + U.esc(s.subtitle) + '</p>';
+        /* בשיחה הכותרת כבר נאמרה בבועת הבוט — הצגתה שוב מתחת לאפשרויות
+           יוצרת כפילות, ומסיטה את המשקל מהתשובות שאמורות להיראות לחיצות. */
+        if (!this.chat) {
+          if (s.eyebrow) inner += '<span class="eyebrow">' + U.esc(this.txt(s.eyebrow)) + '</span>';
+          if (s.title) inner += '<h2>' + U.esc(this.txt(s.title)) + '</h2>';
+          if (s.subtitle) inner += '<p class="sub">' + U.esc(this.txt(s.subtitle)) + '</p>';
+        }
         if (s.type === 'choice') inner += this.renderChoice(s);
         else if (s.type === 'form') inner += this.renderForm(s);
         else if (s.type === 'video') inner += this.renderVideo(s);
@@ -910,7 +1379,9 @@ input[aria-invalid="true"] ~ .err{display:block;}
         ? '<div class="resume">המשכנו מהמקום שעצרת ✓<button data-restart type="button">התחל מחדש</button></div>' : '';
 
       var html;
-      if (ui) {
+      if (this.chat) {
+        html = this.renderChat(s, inner);
+      } else if (ui) {
         // סגנון שאלון ממותג: לוגו + כותרת קבועה + פאנל לבן + פס התקדמות תחתון + הסכמה
         var brand = '<div class="brand">' +
           (ui.logoImg ? '<img src="' + U.esc(ui.logoImg) + '" alt="">' : '') +
@@ -921,7 +1392,7 @@ input[aria-invalid="true"] ~ .err{display:block;}
           html = brand + inner;
         } else {
           html = brand + resumeBar +
-            (ui.headline ? '<div class="headline">' + U.esc(ui.headline) + '</div>' : '') +
+            (ui.headline ? '<div class="headline">' + U.esc(this.txt(ui.headline)) + '</div>' : '') +
             '<div class="qpanel">' + inner + '</div>' +
             this.renderProof(s) +
             '<div class="qfoot">' +
@@ -940,9 +1411,10 @@ input[aria-invalid="true"] ~ .err{display:block;}
 
       UI.body().innerHTML = html;
       this.bind(s);
+      if (this.chat) this.afterChat();
 
       var first = UI.root.querySelector('.opt,input,.btn');
-      if (first && !U.isMobile()) setTimeout(function () { try { first.focus(); } catch (e) { } }, 380);
+      if (first && !U.isMobile() && !this.typing) setTimeout(function () { try { first.focus(); } catch (e) { } }, 380);
     },
 
     renderChoice: function (s) {
@@ -954,12 +1426,14 @@ input[aria-invalid="true"] ~ .err{display:block;}
         if (prev === undefined || prev === null) return false;
         return Object.prototype.toString.call(prev) === '[object Array]' ? prev.indexOf(v) !== -1 : prev === v;
       };
+      var self = this;
       var h = '<div class="' + cls + '" role="group">';
       (s.options || []).forEach(function (o, i) {
         var c = 'opt' + (o.primary ? ' primary' : '') + (o.ghost ? ' ghost' : '');
         h += '<button class="' + c + '" data-opt="' + i + '" aria-pressed="' + (chosen(o.value) ? 'true' : 'false') + '" type="button">';
         if (o.icon) h += '<span class="ic" aria-hidden="true">' + U.esc(o.icon) + '</span>';
-        h += '<span class="tx">' + U.esc(o.label) + (o.desc ? '<span class="dsc">' + U.esc(o.desc) + '</span>' : '') + '</span>';
+        h += '<span class="tx">' + U.esc(self.txt(o.label)) +
+          (o.desc ? '<span class="dsc">' + U.esc(self.txt(o.desc)) + '</span>' : '') + '</span>';
         if (s.multi) h += '<span class="chk" aria-hidden="true">✓</span>';
         else if (quiz && !o.primary && !o.ghost) h += '<span class="rad" aria-hidden="true"></span>';
         h += '</button>';
@@ -992,16 +1466,116 @@ input[aria-invalid="true"] ~ .err{display:block;}
       return h;
     },
 
+    /** התאמה אישית לכל טקסט שמוצג — {{key}} מוחלף בתשובה שכבר ניתנה. */
+    txt: function (v) { return U.fill(v, this.answers, this.quiz); },
+
+    /**
+     * תצוגת שיחה — אותו שאלון בדיוק, במראה של צ'אט.
+     * הכלל שמחזיק את זה: ה"מעטפת" משתנה, אבל החלק האינטראקטיבי (inner) מגיע
+     * מאותם renderChoice/renderForm/renderSuccess עם אותם data-attributes.
+     * לכן bind() לא יודע בכלל שיש מצב שיחה, ואין שני מסלולי לוגיקה שיתפצלו.
+     */
+    renderChat: function (s, inner) {
+      var ui = this.ui || {};
+      var self = this;
+      // רישום השאלה הנוכחית ביומן, פעם אחת לכל שלב
+      if (this.logStep !== s.id) {
+        this.logStep = s.id;
+        var q = [s.eyebrow, s.title, s.subtitle].filter(Boolean)
+          .map(function (x) { return self.txt(x); });
+        if (q.length) { this.log.push({ side: 'bot', lines: q }); this.typing = !U.reducedMotion(); }
+      }
+      var bubbles = '', last = this.log.length - 1;
+      this.log.forEach(function (m, i) {
+        // בזמן "מקליד" ההודעה החדשה עוד לא נחשפת — אחרת היא ותיבת ההקלדה
+        // היו מופיעות יחד והאפקט מאבד את משמעותו
+        if (self.typing && i === last && m.side === 'bot') return;
+        if (m.side === 'me') {
+          bubbles += '<div class="cmsg me"><div class="cb">' + U.esc(m.text) + '</div></div>';
+          return;
+        }
+        bubbles += '<div class="cmsg bot">' + (ui.logoText
+          ? '<span class="cav" aria-hidden="true">' + U.esc(ui.logoText.charAt(0)) + '</span>' : '') +
+          '<div class="cb">' + m.lines.map(function (l, i) {
+            return '<span class="cl' + (i ? ' sub' : '') + '">' + U.esc(l) + '</span>';
+          }).join('') + '</div></div>';
+      });
+      // "מקליד..." — מוצג רק כשההודעה האחרונה טרייה, ומוחלף בתוכן אחרי רגע
+      var typing = this.typing
+        ? '<div class="cmsg bot"><div class="cb typing"><i></i><i></i><i></i></div></div>' : '';
+
+      var head = '<div class="chead">' +
+        (ui.logoImg ? '<img src="' + U.esc(ui.logoImg) + '" alt="">' : '') +
+        '<span class="ct">' + U.esc(ui.logoText || 'צ׳אט') + '</span>' +
+        (ui.logoSub ? '<span class="cs">' + U.esc(ui.logoSub) + '</span>' : '') +
+        '<span class="con">מקוון</span></div>';
+
+      var prog = s.progress ? '<div class="cbar"><i style="width:' +
+        Math.max(6, this.progressPct() || 6) + '%"></i></div>' : '';
+
+      // רמז מילולי קצר — רק בשאלת בחירה, ורק בשאלה הראשונה שבה יש אפשרויות
+      var tap = (s.type === 'choice' && (s.options || []).length && this.log.length <= 1)
+        ? '<div class="ctap">בחרו תשובה כדי להמשיך</div>' : '';
+
+      return head + prog +
+        '<div class="clog" data-clog>' + bubbles + (this.typing ? typing : '') + '</div>' +
+        '<div class="cin"' + (this.typing ? ' hidden' : '') + '>' + inner + tap +
+        (this.history.length && s.type !== 'success'
+          ? '<button class="cback" data-back type="button">‹ חזרה לשאלה הקודמת</button>' : '') +
+        (ui.consentText && s.type !== 'success'
+          ? '<label class="consent qconsent"><input type="checkbox" data-consent' +
+            (this.answers._consent ? ' checked' : '') + '><span>' + U.esc(ui.consentText) + '</span></label>'
+          : '') + '</div>';
+    },
+
+    /** גלילה לתחתית היומן + החלפת "מקליד" בתוכן אחרי השהיה קצרה. */
+    afterChat: function () {
+      var root = UI.root; if (!root) return;
+      var log = root.querySelector('[data-clog]');
+      if (log) log.scrollTop = log.scrollHeight;
+      var self = this;
+      if (this.typing) {
+        clearTimeout(this._typeT);
+        this._typeT = setTimeout(function () {
+          if (!self.camp) return;
+          self.typing = false; self.render();
+        }, 480);
+      }
+    },
+
+    /* מקור אמת יחיד: גם ה-HTML וגם האנליטיקות שואלים דרך כאן, כדי שלא ייווצר
+       מצב שהכרטיס מוצג אבל מדווח אחרת (או להפך). */
+    recoFor: function (s) {
+      if (s && s.showRecommendation === false) return { product: null, reason: 'step_off' };
+      return Reco.explain(this.answers);
+    },
+
     renderSuccess: function (s) {
       var h = '<div class="ok"><div class="badge">✓</div>';
-      h += '<h2>' + U.esc(s.title || 'תודה!') + '</h2>';
-      if (s.body) h += '<p class="sub">' + U.esc(s.body) + '</p>';
+      h += '<h2>' + U.esc(this.txt(s.title || 'תודה!')) + '</h2>';
+      if (s.body) h += '<p class="sub">' + U.esc(this.txt(s.body)) + '</p>';
       h += '</div>';
+      var rec = this.recoFor(s).product;
+      if (rec) h += this.renderRecommendation(rec);
       if (s.couponCode) {
         h += '<div class="coupon"><code data-code>' + U.esc(s.couponCode) + '</code>' +
           '<button class="copy" data-copy type="button">העתק</button></div>';
       }
       if (s.ctaLabel) h += '<button class="btn" data-cta type="button">' + U.esc(s.ctaLabel) + '</button>';
+      return h;
+    },
+
+    renderRecommendation: function (p) {
+      var h = '<div class="reco">';
+      if (p.image) h += '<img class="reco-img" src="' + U.esc(p.image) + '" alt="' + U.esc(p.name || '') + '" loading="lazy">';
+      h += '<div class="reco-body"><span class="reco-eyebrow">ההמלצה בשבילך</span>';
+      if (p.name) h += '<h3 class="reco-name">' + U.esc(p.name) + '</h3>';
+      if (p.tagline) h += '<p class="reco-tag">' + U.esc(p.tagline) + '</p>';
+      var wa = Reco.waLink(p, this.answers);
+      h += '<div class="reco-actions">';
+      if (p.url) h += '<a class="btn" data-reco-view="' + U.esc(p.id || '') + '" href="' + U.esc(p.url) + '" target="_blank" rel="noopener">לצפייה במוצר</a>';
+      if (wa) h += '<a class="btn wa" data-reco-wa="' + U.esc(p.id || '') + '" href="' + U.esc(wa) + '" target="_blank" rel="noopener">שאלה בוואטסאפ</a>';
+      h += '</div></div></div>';
       return h;
     },
 
@@ -1094,6 +1668,8 @@ input[aria-invalid="true"] ~ .err{display:block;}
 
           btn.setAttribute('aria-pressed', 'true');
           if (s.key) self.answers[s.key] = o.value;
+          // בשיחה התשובה מהדהדת כבועה של הגולש — זה מה שהופך את זה לדו-שיח
+          if (self.chat) self.log.push({ side: 'me', text: o.report || o.label || o.value });
           Analytics.track('step_answer', {
             campaign: self.camp.id, variant: self.variant.id, step: s.id,
             key: s.key, value: o.value, stepIndex: self.idx
@@ -1153,6 +1729,19 @@ input[aria-invalid="true"] ~ .err{display:block;}
         self.close('cta');
         if (url) setTimeout(function () { location.href = url; }, 60);
       };
+
+      // המלצת מוצר — צפייה / וואטסאפ (קישורים אמיתיים, רק מדווחים)
+      root.querySelectorAll('[data-reco-view]').forEach(function (el) {
+        el.onclick = function () {
+          Analytics.track('reco_view_click', { campaign: self.camp.id, variant: self.variant.id,
+            product: el.getAttribute('data-reco-view'), trigger: self.trigger || '' });
+        };
+      });
+      var recoWa = root.querySelector('[data-reco-wa]');
+      if (recoWa) recoWa.onclick = function () {
+        Analytics.track('reco_wa_click', { campaign: self.camp.id, variant: self.variant.id,
+          product: recoWa.getAttribute('data-reco-wa'), trigger: self.trigger || '' });
+      };
     },
 
     submit: function (s, form) {
@@ -1197,6 +1786,9 @@ input[aria-invalid="true"] ~ .err{display:block;}
       var label = btn.textContent;
       btn.disabled = true;
       btn.innerHTML = '<span class="spin"></span>שולח...';
+
+      var rec = Reco.resolve(this.answers);
+      if (rec) this.answers.recommendedProduct = rec.id;
 
       var lead = U.merge(data, {
         answers: U.merge(this.answers, { _page: location.pathname, _title: doc.title }),
@@ -1293,8 +1885,8 @@ input[aria-invalid="true"] ~ .err{display:block;}
     if (!chk.ok) { U.log('דילוג על ' + camp.id + ': ' + chk.why); return false; }
     var v = AB.pick(camp);
     if (!v) return false;
-    Flow.open(camp, v, reason);
-    return true;
+    // פתיחה שנכשלה (ווריאנט שבור) לא "שורפת" את הטריגר — קמפיין אחר עוד יוכל לרוץ
+    return Flow.open(camp, v, reason) !== false;
   }
 
   /* ==========================================================================
@@ -1562,7 +2154,7 @@ input[aria-invalid="true"] ~ .err{display:block;}
       return n;
     },
 
-    _internals: { U: U, Store: Store, Stats: Stats, Analytics: Analytics, CRM: CRM, AB: AB, Flow: Flow, Triggers: Triggers, eligible: eligible, checkEligible: checkEligible, attempt: attempt }
+    _internals: { U: U, Store: Store, Stats: Stats, Analytics: Analytics, CRM: CRM, AB: AB, Flow: Flow, Reco: Reco, Triggers: Triggers, eligible: eligible, checkEligible: checkEligible, attempt: attempt }
   };
 
   /* ==========================================================================
@@ -1605,6 +2197,7 @@ input[aria-invalid="true"] ~ .err{display:block;}
     // הגנה: הגדרות מהשרת עלולות להגיע בלי מקטעים מסוימים — משלימים ברירות מחדל
     cfg.theme = cfg.theme || {};
     if (!cfg.theme.fontFamily) cfg.theme.fontFamily = "'Assistant','Heebo',-apple-system,'Segoe UI',sans-serif";
+    if (cfg.theme.bgAnim == null) cfg.theme.bgAnim = 'none';
     var themeDefaults = { radius: '22px', primary: '#0F8A5F', primaryDark: '#0A6444', accent: '#9BE564',
       accentGlow: 'rgba(155,229,100,.45)', ink: '#0B2B22', inkSoft: '#4A6B60', surface: '#FFFFFF',
       surfaceAlt: '#F3FAF6', border: '#DCEDE4', overlay: 'rgba(6,32,24,.62)', overlayBlur: '6px',
@@ -1624,6 +2217,8 @@ input[aria-invalid="true"] ~ .err{display:block;}
     else boot();
     return API;
   };
+
+  API.presets = win.HYDROPOP_PRESETS || [];   // נטען מ-hydropop.presets.js
 
   win.HydroPop = API;
   // תאימות לאחור: הגדרות שכבר נטענו בעמוד → אתחול מיידי
@@ -1694,4 +2289,4 @@ input[aria-invalid="true"] ~ .err{display:block;}
 })(window, document);
 
 /* חותמת בנייה — הרץ HydroPop.build בקונסול כדי לוודא איזו גרסה רצה באתר */
-try{window.HydroPop.build="2026-08-12 19:24";}catch(e){}
+try{window.HydroPop.build="2026-08-15 20:13";}catch(e){}
